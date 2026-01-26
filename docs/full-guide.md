@@ -282,6 +282,149 @@ docker run -d --env-file .env -p 8000:8000 -v ./data:/app/data stock-analysis py
 
 ---
 
+## Podman 部署（Docker 替代方案）
+
+Podman 是 Docker 的替代品，支持 rootless 模式，无需 root 权限即可运行容器，更加安全。
+
+### 快速启动
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/ZhuLinsen/daily_stock_analysis.git
+cd daily_stock_analysis
+
+# 2. 配置环境变量
+cp .env.example .env
+vim .env  # 填入 API Key 和配置
+
+# 3. 启动容器（方式一：使用 podman compose，推荐）
+podman compose -f ./docker/podman-compose.yml up -d webui      # WebUI 模式
+podman compose -f ./docker/podman-compose.yml up -d analyzer   # 定时任务模式
+podman compose -f ./docker/podman-compose.yml up -d            # 同时启动两种模式
+
+# 或使用脚本（方式二：最简单）
+./docker/podman-build.sh                    # 构建镜像
+./docker/podman-run.sh webui                # WebUI 模式
+./docker/podman-run.sh analyzer             # 定时任务模式
+
+# 4. 访问 WebUI
+# http://localhost:8000
+
+# 5. 查看日志
+podman compose -f ./docker/podman-compose.yml logs -f webui
+# 或
+podman logs -f stock-webui
+```
+
+### 运行模式说明
+
+| 命令 | 说明 | 端口 |
+|------|------|------|
+| `podman compose -f ./docker/podman-compose.yml up -d webui` | WebUI 模式，手动触发分析 | 8000 |
+| `podman compose -f ./docker/podman-compose.yml up -d analyzer` | 定时任务模式，每日自动执行 | - |
+| `podman compose -f ./docker/podman-compose.yml up -d` | 同时启动两种模式 | 8000 |
+
+### Podman Compose 配置
+
+`podman-compose.yml` 与 `docker-compose.yml` 基本兼容，主要区别：
+- 日志驱动使用 `k8s-file`（Podman 推荐）
+- 代理设置使用 `host.containers.internal`（而非 `host.docker.internal`）
+
+### 常用命令
+
+```bash
+# 查看运行状态
+podman compose -f ./docker/podman-compose.yml ps
+# 或
+podman ps
+
+# 查看日志
+podman compose -f ./docker/podman-compose.yml logs -f webui
+# 或
+podman logs -f stock-webui
+
+# 停止服务
+podman compose -f ./docker/podman-compose.yml down
+# 或
+podman stop stock-webui stock-analyzer
+podman rm stock-webui stock-analyzer
+
+# 重建镜像（代码更新后）
+podman compose -f ./docker/podman-compose.yml build --no-cache
+podman compose -f ./docker/podman-compose.yml up -d webui
+# 或使用脚本
+./docker/podman-build.sh
+./docker/podman-run.sh webui
+
+# 进入容器调试
+podman exec -it stock-webui bash
+
+# 手动执行一次分析
+podman exec stock-analyzer python main.py --no-notify
+```
+
+### 手动构建镜像
+
+```bash
+# 使用 Podman 构建
+podman build -f docker/Dockerfile -t stock-analysis:latest .
+
+# 运行容器
+podman run -d \
+  --name stock-webui \
+  --env-file .env \
+  -p 8000:8000 \
+  -v ./data:/app/data \
+  -v ./logs:/app/logs \
+  -v ./reports:/app/reports \
+  stock-analysis:latest \
+  python main.py --webui-only
+```
+
+### Podman 与 Docker 的区别
+
+| 特性 | Docker | Podman |
+|------|--------|--------|
+| 权限 | 需要 root 或 docker 组 | 支持 rootless，无需特殊权限 |
+| 守护进程 | 需要 dockerd 守护进程 | 无需守护进程，更轻量 |
+| 命令兼容性 | - | 大部分命令与 Docker 兼容 |
+| 安全性 | 需要 root 权限 | 更安全，支持 rootless |
+| 镜像构建 | `docker build` | `podman build` |
+| Compose | `docker-compose` | `podman compose` 或 `podman-compose` |
+
+### 安装 Podman
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install -y podman
+
+# CentOS/RHEL 8+
+sudo yum install -y podman
+
+# Fedora
+sudo dnf install -y podman
+
+# macOS
+brew install podman
+podman machine init
+podman machine start
+```
+
+### 安装 Podman Compose
+
+Podman 4.0+ 已内置 `podman compose` 命令，无需额外安装。如果使用旧版本：
+
+```bash
+# 使用 pip 安装 podman-compose
+pip install podman-compose
+
+# 使用方式
+podman-compose -f ./docker/podman-compose.yml up -d
+```
+
+---
+
 ## 本地运行详细配置
 
 ### 安装依赖

@@ -118,9 +118,20 @@
 
 默认每个工作日 **18:00（北京时间）** 自动执行
 
-### 方式二：本地运行 / Docker 部署
+### 方式二：本地运行 / Docker / Podman 部署
 
-> 📖 本地运行、Docker 部署详细步骤请参考 [完整配置指南](docs/full-guide.md)
+> 📖 本地运行、Docker/Podman 部署详细步骤请参考 [完整配置指南](docs/full-guide.md)
+>
+> 🦫 **无 Docker 环境？** 可以使用 Podman（Docker 的替代品，支持 rootless 模式，更安全）：
+> ```bash
+> # 使用 Podman Compose
+> podman compose -f ./docker/podman-compose.yml up -d webui
+> 
+> # 或使用提供的脚本
+> ./docker/podman-build.sh
+> ./docker/podman-run.sh webui
+> ```
+> 详细说明请参考 [部署指南 - Podman 部署](docs/DEPLOY.md#方案一备选podman-compose-部署)
 
 ## 📱 推送效果
 

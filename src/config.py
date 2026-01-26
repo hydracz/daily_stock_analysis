@@ -158,6 +158,8 @@ class Config:
     webui_enabled: bool = False
     webui_host: str = "127.0.0.1"
     webui_port: int = 8000
+    webui_username: Optional[str] = None  # WebUI 认证用户名（可选，留空则无需认证）
+    webui_password: Optional[str] = None  # WebUI 认证密码（可选，留空则无需认证）
     
     # === 机器人配置 ===
     bot_enabled: bool = True              # 是否启用机器人功能
@@ -319,6 +321,11 @@ class Config:
             discord_bot_token=os.getenv('DISCORD_BOT_TOKEN'),
             discord_main_channel_id=os.getenv('DISCORD_MAIN_CHANNEL_ID'),
             discord_webhook_url=os.getenv('DISCORD_WEBHOOK_URL'),
+            webui_enabled=os.getenv('WEBUI_ENABLED', 'false').lower() == 'true',
+            webui_host=os.getenv('WEBUI_HOST', '127.0.0.1'),
+            webui_port=int(os.getenv('WEBUI_PORT', '8000')),
+            webui_username=os.getenv('WEBUI_USERNAME'),
+            webui_password=os.getenv('WEBUI_PASSWORD'),
             single_stock_notify=os.getenv('SINGLE_STOCK_NOTIFY', 'false').lower() == 'true',
             report_type=os.getenv('REPORT_TYPE', 'simple').lower(),
             analysis_delay=float(os.getenv('ANALYSIS_DELAY', '0')),

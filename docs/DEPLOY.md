@@ -7,11 +7,12 @@
 | 方案 | 优点 | 缺点 | 推荐场景 |
 |------|------|------|----------|
 | **Docker Compose** ⭐ | 一键部署、环境隔离、易迁移、易升级 | 需要安装 Docker | **推荐**：大多数场景 |
+| **Podman Compose** ⭐ | 无需 root、更安全、兼容 Docker | 需要安装 Podman | **推荐**：无 Docker 环境、注重安全性 |
 | **直接部署** | 简单直接、无额外依赖 | 环境依赖、迁移麻烦 | 临时测试 |
 | **Systemd 服务** | 系统级管理、开机自启 | 配置繁琐 | 长期稳定运行 |
 | **Supervisor** | 进程管理、自动重启 | 需要额外安装 | 多进程管理 |
 
-**结论：推荐使用 Docker Compose，迁移最快最方便！**
+**结论：推荐使用 Docker Compose 或 Podman Compose，迁移最快最方便！**
 
 ---
 
@@ -77,6 +78,139 @@ docker-compose -f ./docker/docker-compose.yml exec stock-analyzer python main.py
 ```
 
 ### 5. 数据持久化
+
+数据自动保存在宿主机目录：
+- `./data/` - 数据库文件
+- `./logs/` - 日志文件
+- `./reports/` - 分析报告
+
+---
+
+## 🦫 方案一（备选）：Podman Compose 部署
+
+Podman 是 Docker 的替代品，支持 rootless 模式，无需 root 权限即可运行容器，更加安全。
+
+### 1. 安装 Podman
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install -y podman
+
+# CentOS/RHEL 8+
+sudo yum install -y podman
+
+# Fedora
+sudo dnf install -y podman
+
+# macOS
+brew install podman
+podman machine init
+podman machine start
+```
+
+### 2. 安装 Podman Compose（可选）
+
+Podman 4.0+ 已内置 `podman compose` 命令，无需额外安装。如果使用旧版本，可以安装 `podman-compose`：
+
+```bash
+# 方式一：使用 pip 安装 podman-compose
+pip install podman-compose
+
+# 方式二：使用 Podman 4.0+ 内置的 compose 命令（推荐）
+# 无需安装，直接使用 podman compose
+```
+
+### 3. 准备配置文件
+
+```bash
+# 克隆代码（或上传代码到服务器）
+git clone <your-repo-url> /opt/stock-analyzer
+cd /opt/stock-analyzer
+
+# 复制并编辑配置文件
+cp .env.example .env
+vim .env  # 填入真实的 API Key 等配置
+```
+
+### 4. 一键启动
+
+#### 方式一：使用 podman-compose（兼容旧版本）
+
+```bash
+# 构建并启动
+podman-compose -f ./docker/podman-compose.yml up -d
+
+# 查看日志
+podman-compose -f ./docker/podman-compose.yml logs -f
+
+# 查看运行状态
+podman-compose -f ./docker/podman-compose.yml ps
+```
+
+#### 方式二：使用 podman compose（Podman 4.0+，推荐）
+
+```bash
+# 构建并启动
+podman compose -f ./docker/podman-compose.yml up -d
+
+# 查看日志
+podman compose -f ./docker/podman-compose.yml logs -f
+
+# 查看运行状态
+podman compose -f ./docker/podman-compose.yml ps
+```
+
+#### 方式三：使用提供的脚本（最简单）
+
+```bash
+# 构建镜像
+./docker/podman-build.sh
+
+# 运行容器（WebUI 模式）
+./docker/podman-run.sh webui
+
+# 运行容器（定时任务模式）
+./docker/podman-run.sh analyzer
+```
+
+### 5. 常用管理命令
+
+```bash
+# 停止服务（podman-compose）
+podman-compose -f ./docker/podman-compose.yml down
+
+# 停止服务（podman compose）
+podman compose -f ./docker/podman-compose.yml down
+
+# 重启服务
+podman compose -f ./docker/podman-compose.yml restart
+
+# 更新代码后重新部署
+git pull
+podman compose -f ./docker/podman-compose.yml build --no-cache
+podman compose -f ./docker/podman-compose.yml up -d
+
+# 进入容器调试
+podman exec -it stock-analyzer bash
+
+# 手动执行一次分析
+podman exec stock-analyzer python main.py --no-notify
+
+# 查看容器日志
+podman logs -f stock-webui
+```
+
+### 6. Podman 与 Docker 的区别
+
+| 特性 | Docker | Podman |
+|------|--------|--------|
+| 权限 | 需要 root 或 docker 组 | 支持 rootless，无需特殊权限 |
+| 守护进程 | 需要 dockerd 守护进程 | 无需守护进程 |
+| 命令兼容性 | - | 大部分命令与 Docker 兼容 |
+| 安全性 | 需要 root 权限 | 更安全，支持 rootless |
+
+### 7. 数据持久化
 
 数据自动保存在宿主机目录：
 - `./data/` - 数据库文件
@@ -230,6 +364,11 @@ os.environ["https_proxy"] = "http://your-proxy:port"
 # Docker 方式
 docker-compose -f ./docker/docker-compose.yml logs -f --tail=100
 
+# Podman 方式
+podman compose -f ./docker/podman-compose.yml logs -f --tail=100
+# 或
+podman logs -f stock-webui
+
 # 直接部署
 tail -f /opt/stock-analyzer/logs/stock_analysis_*.log
 ```
@@ -258,11 +397,16 @@ find /opt/stock-analyzer/reports -mtime +30 -delete
 
 ## ❓ 常见问题
 
-### 1. Docker 构建失败
+### 1. Docker/Podman 构建失败
 
 ```bash
-# 清理缓存重新构建
+# Docker 清理缓存重新构建
 docker-compose -f ./docker/docker-compose.yml build --no-cache
+
+# Podman 清理缓存重新构建
+podman compose -f ./docker/podman-compose.yml build --no-cache
+# 或使用脚本
+./docker/podman-build.sh
 ```
 
 ### 2. API 访问超时
@@ -278,7 +422,7 @@ rm /opt/stock-analyzer/data/*.lock
 
 ### 4. 内存不足
 
-调整 `docker-compose.yml` 中的内存限制：
+调整 `docker-compose.yml` 或 `podman-compose.yml` 中的内存限制：
 ```yaml
 deploy:
   resources:
@@ -302,7 +446,12 @@ mkdir -p /opt/stock-analyzer
 cd /opt/stock-analyzer
 git clone <your-repo-url> .
 tar -xzvf stock-analyzer-backup.tar.gz
+
+# 使用 Docker
 docker-compose -f ./docker/docker-compose.yml up -d
+
+# 或使用 Podman
+podman compose -f ./docker/podman-compose.yml up -d
 ```
 
 ---

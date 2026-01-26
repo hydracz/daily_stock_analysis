@@ -20,8 +20,17 @@ A股自选股智能分析系统 - 环境验证测试
 
 """
 import os
-os.environ["http_proxy"] = "http://127.0.0.1:10809"
-os.environ["https_proxy"] = "http://127.0.0.1:10809"
+# 注意：代理配置应从环境变量或 .env 文件读取，不要硬编码
+# 如果需要在测试时设置代理，请使用环境变量：
+# export HTTP_PROXY=http://127.0.0.1:10809
+# export HTTPS_PROXY=http://127.0.0.1:10809
+# 或在 .env 文件中配置
+http_proxy = os.getenv('HTTP_PROXY')
+https_proxy = os.getenv('HTTPS_PROXY')
+if http_proxy:
+    os.environ["http_proxy"] = http_proxy
+if https_proxy:
+    os.environ["https_proxy"] = https_proxy
 
 import argparse
 import logging

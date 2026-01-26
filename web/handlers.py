@@ -55,6 +55,10 @@ class Response:
         handler.send_response(self.status)
         handler.send_header("Content-Type", self.content_type)
         handler.send_header("Content-Length", str(len(self.body)))
+        # 添加安全响应头
+        handler.send_header("X-Content-Type-Options", "nosniff")
+        handler.send_header("X-Frame-Options", "DENY")
+        handler.send_header("X-XSS-Protection", "1; mode=block")
         handler.end_headers()
         handler.wfile.write(self.body)
 

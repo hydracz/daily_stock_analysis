@@ -22,6 +22,7 @@ from web.handlers import (
     get_page_handler, get_api_handler, get_bot_handler
 )
 from web.templates import render_error_page
+from web.auth import get_auth_manager
 
 if TYPE_CHECKING:
     from http.server import BaseHTTPRequestHandler
@@ -143,6 +144,26 @@ class Router:
         if path == "":
             path = "/"
         
+        # 健康检查接口不需要认证
+        if path == "/health":
+            route = self.match(path, method)
+            if route:
+                try:
+                    response = route.handler(query)
+                    response.send(request_handler)
+                    return
+                except Exception as e:
+                    logger.error(f"[Router] 处理请求失败: {method} {path} - {e}")
+                    self._send_error(request_handler, str(e))
+                    return
+        
+        # 检查认证（除了健康检查接口）
+        auth_manager = get_auth_manager()
+        if auth_manager.enabled:
+            if not auth_manager.check_auth(request_handler):
+                auth_manager.send_auth_required(request_handler)
+                return
+        
         # 匹配路由
         route = self.match(path, method)
         
@@ -182,6 +203,13 @@ class Router:
         if path.startswith("/bot/"):
             self._dispatch_bot_webhook(request_handler, path, raw_body_bytes)
             return
+        
+        # 检查认证（Bot Webhook 除外）
+        auth_manager = get_auth_manager()
+        if auth_manager.enabled:
+            if not auth_manager.check_auth(request_handler):
+                auth_manager.send_auth_required(request_handler)
+                return
         
         # 普通 POST 请求
         form_data = parse_qs(raw_body)
