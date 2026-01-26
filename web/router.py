@@ -19,10 +19,11 @@ from urllib.parse import parse_qs, urlparse
 
 from web.handlers import (
     Response, HtmlResponse, JsonResponse,
-    get_page_handler, get_api_handler, get_bot_handler
+    get_page_handler, get_api_handler, get_bot_handler, get_user_handler
 )
 from web.templates import render_error_page
 from web.auth import get_auth_manager
+from src.user_service import get_user_service
 
 if TYPE_CHECKING:
     from http.server import BaseHTTPRequestHandler
@@ -116,12 +117,20 @@ class Router:
             匹配的路由，或 None
         """
         method = method.upper()
+        logger.debug(f"[Router] 匹配路由: {method} {path}")
+        logger.debug(f"[Router] 已注册的路由: {list(self._routes.keys())}")
         routes_for_path = self._routes.get(path)
         
         if routes_for_path is None:
+            logger.debug(f"[Router] 路径不存在: {path}")
             return None
         
-        return routes_for_path.get(method)
+        route = routes_for_path.get(method)
+        if route:
+            logger.debug(f"[Router] 路由匹配成功: {method} {path}")
+        else:
+            logger.debug(f"[Router] 路径存在但方法不匹配: {path}, 已注册方法: {list(routes_for_path.keys())}")
+        return route
     
     def dispatch(
         self,
@@ -144,8 +153,9 @@ class Router:
         if path == "":
             path = "/"
         
-        # 健康检查接口不需要认证
-        if path == "/health":
+        # 健康检查和登录接口不需要认证
+        public_paths = ["/health", "/login", "/api/login", "/api/logout"]
+        if path in public_paths:
             route = self.match(path, method)
             if route:
                 try:
@@ -157,11 +167,15 @@ class Router:
                     self._send_error(request_handler, str(e))
                     return
         
-        # 检查认证（除了健康检查接口）
+        # 检查认证（除了公开路径）
         auth_manager = get_auth_manager()
         if auth_manager.enabled:
-            if not auth_manager.check_auth(request_handler):
-                auth_manager.send_auth_required(request_handler)
+            user_info = auth_manager.check_auth(request_handler)
+            if not user_info:
+                # 多用户模式：重定向到登录页面
+                # 单用户模式：使用 Basic Auth
+                has_users = len(get_user_service().list_users(include_disabled=True)) > 0
+                auth_manager.send_auth_required(request_handler, redirect_to_login=has_users)
                 return
         
         # 匹配路由
@@ -173,9 +187,20 @@ class Router:
             return
         
         try:
-            # 调用处理器
-            response = route.handler(query)
-            response.send(request_handler)
+            # 调用处理器（传递 request_handler 用于获取当前用户）
+            # 检查处理器是否需要 request_handler 参数
+            import inspect
+            try:
+                sig = inspect.signature(route.handler)
+                if 'request_handler' in sig.parameters or len(sig.parameters) > 1:
+                    response = route.handler(query, request_handler)
+                else:
+                    response = route.handler(query)
+            except Exception:
+                # 如果检查失败，尝试直接调用
+                response = route.handler(query)
+            if response:
+                response.send(request_handler)
             
         except Exception as e:
             logger.error(f"[Router] 处理请求失败: {method} {path} - {e}")
@@ -204,15 +229,103 @@ class Router:
             self._dispatch_bot_webhook(request_handler, path, raw_body_bytes)
             return
         
-        # 检查认证（Bot Webhook 除外）
-        auth_manager = get_auth_manager()
-        if auth_manager.enabled:
-            if not auth_manager.check_auth(request_handler):
-                auth_manager.send_auth_required(request_handler)
+        # 解析 POST 数据（支持 application/x-www-form-urlencoded、application/json 和 multipart/form-data）
+        content_type = request_handler.headers.get("Content-Type", "").lower()
+        if "application/json" in content_type:
+            # JSON 格式：解析为字典，然后转换为 form_data 格式
+            import json
+            try:
+                json_data = json.loads(raw_body)
+                form_data = {k: [str(v)] if not isinstance(v, list) else [str(item) for item in v] 
+                            for k, v in json_data.items()}
+            except json.JSONDecodeError:
+                form_data = {}
+        elif "multipart/form-data" in content_type:
+            # multipart/form-data 格式：使用 email.message 解析
+            try:
+                from email import message_from_bytes
+                from email.header import decode_header
+                msg = message_from_bytes(b"Content-Type: " + content_type.encode() + b"\r\n\r\n" + raw_body_bytes)
+                form_data = {}
+                if msg.is_multipart():
+                    for part in msg.walk():
+                        if part.get_content_disposition() == 'form-data':
+                            name = part.get_param('name', header='content-disposition')
+                            if name:
+                                value = part.get_payload(decode=True)
+                                if value:
+                                    form_data.setdefault(name, []).append(value.decode('utf-8', errors='replace'))
+            except Exception as e:
+                logger.warning(f"[Router] multipart/form-data 解析失败，尝试备用方法: {e}")
+                # 备用方法：简单解析（适用于简单表单）
+                form_data = {}
+                # 尝试从原始 body 中提取字段（简单实现）
+                try:
+                    import re
+                    # 查找 name="field" 后面的内容
+                    pattern = r'name="([^"]+)"\r?\n\r?\n([^\r\n]+)'
+                    matches = re.findall(pattern, raw_body)
+                    for name, value in matches:
+                        form_data.setdefault(name, []).append(value)
+                except Exception:
+                    pass
+        else:
+            # 表单格式（application/x-www-form-urlencoded）：使用 parse_qs
+            form_data = parse_qs(raw_body)
+        
+        # 公开路径不需要认证
+        public_paths = ["/login", "/api/login", "/api/logout"]
+        if path in public_paths:
+            route = self.match(path, "POST")
+            if route:
+                logger.debug(f"[Router] 匹配到公开路径: POST {path}")
+                try:
+                    # 检查处理器是否需要 request_handler 参数
+                    import inspect
+                    try:
+                        sig = inspect.signature(route.handler)
+                        logger.debug(f"[Router] 处理器签名: {sig}")
+                        if 'request_handler' in sig.parameters or len(sig.parameters) > 1:
+                            logger.debug(f"[Router] 调用处理器（带 request_handler）")
+                            response = route.handler(form_data, request_handler)
+                        else:
+                            logger.debug(f"[Router] 调用处理器（不带 request_handler）")
+                            response = route.handler(form_data)
+                    except Exception as sig_error:
+                        logger.warning(f"[Router] 签名检查失败，尝试直接调用: {sig_error}")
+                        # 如果检查失败，尝试直接调用
+                        response = route.handler(form_data)
+                    
+                    if response:
+                        logger.debug(f"[Router] 准备发送响应: {type(response).__name__}")
+                        try:
+                            response.send(request_handler)
+                            logger.debug(f"[Router] 响应发送成功: POST {path}")
+                        except Exception as send_error:
+                            logger.error(f"[Router] 发送响应失败: POST {path} - {send_error}", exc_info=True)
+                    else:
+                        logger.warning(f"[Router] 处理器返回 None: POST {path}")
+                    return
+                except Exception as e:
+                    logger.error(f"[Router] 处理请求失败: POST {path} - {e}", exc_info=True)
+                    try:
+                        self._send_error(request_handler, str(e))
+                    except Exception:
+                        pass
+                    return
+            else:
+                logger.warning(f"[Router] 未找到路由: POST {path}")
+                self._send_not_found(request_handler, path)
                 return
         
-        # 普通 POST 请求
-        form_data = parse_qs(raw_body)
+        # 检查认证（Bot Webhook 和公开路径除外）
+        auth_manager = get_auth_manager()
+        if auth_manager.enabled:
+            user_info = auth_manager.check_auth(request_handler)
+            if not user_info:
+                has_users = len(get_user_service().list_users(include_disabled=True)) > 0
+                auth_manager.send_auth_required(request_handler, redirect_to_login=has_users)
+                return
         
         # 匹配路由
         route = self.match(path, "POST")
@@ -222,9 +335,19 @@ class Router:
             return
         
         try:
-            # 调用处理器（传入 form_data）
-            response = route.handler(form_data)
-            response.send(request_handler)
+            # 调用处理器（传递 request_handler 用于获取当前用户）
+            import inspect
+            try:
+                sig = inspect.signature(route.handler)
+                if 'request_handler' in sig.parameters or len(sig.parameters) > 1:
+                    response = route.handler(form_data, request_handler)
+                else:
+                    response = route.handler(form_data)
+            except Exception:
+                # 如果检查失败，尝试直接调用
+                response = route.handler(form_data)
+            if response:
+                response.send(request_handler)
             
         except Exception as e:
             logger.error(f"[Router] 处理 POST 请求失败: {path} - {e}")
@@ -311,18 +434,31 @@ def create_default_router() -> Router:
     # 获取处理器
     page_handler = get_page_handler()
     api_handler = get_api_handler()
+    user_handler = get_user_handler()
     
     # === 页面路由 ===
     router.register(
         "/", "GET",
-        lambda q: page_handler.handle_index(),
+        lambda q, rh: page_handler.handle_index(rh),
         "配置首页"
     )
     
     router.register(
         "/update", "POST",
-        lambda form: page_handler.handle_update(form),
+        lambda form, rh: page_handler.handle_update(form, rh),
         "更新配置"
+    )
+    
+    router.register(
+        "/login", "GET",
+        lambda q: user_handler.handle_login_page(),
+        "登录页面"
+    )
+    
+    router.register(
+        "/admin/users", "GET",
+        lambda q, rh: user_handler.handle_user_manage(rh),
+        "用户管理页面"
     )
     
     # === API 路由 ===
@@ -348,6 +484,31 @@ def create_default_router() -> Router:
         "/task", "GET",
         lambda q: api_handler.handle_task_status(q),
         "查询任务状态"
+    )
+    
+    # === 用户管理 API 路由 ===
+    router.register(
+        "/api/login", "POST",
+        lambda form, rh: user_handler.handle_login(form, rh),
+        "用户登录"
+    )
+    
+    router.register(
+        "/api/logout", "GET",
+        lambda q, rh: user_handler.handle_logout(rh),
+        "用户登出"
+    )
+    
+    router.register(
+        "/api/admin/users", "POST",
+        lambda form, rh: user_handler.handle_create_user(form, rh),
+        "创建用户"
+    )
+    
+    router.register(
+        "/api/admin/users", "DELETE",
+        lambda q, rh: user_handler.handle_delete_user(q, rh),
+        "删除用户"
     )
     
     # === Bot Webhook 路由 ===

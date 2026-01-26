@@ -106,10 +106,10 @@ def main() -> int:
     主入口函数
     
     支持环境变量配置:
-        WEBUI_HOST: 监听地址 (默认 127.0.0.1)
+        WEBUI_HOST: 监听地址 (默认 0.0.0.0)
         WEBUI_PORT: 监听端口 (默认 8000)
     """
-    host = os.getenv("WEBUI_HOST", "127.0.0.1")
+    host = os.getenv("WEBUI_HOST", "0.0.0.0")
     port = int(os.getenv("WEBUI_PORT", "8000"))
     
     print(f"WebUI running: http://{host}:{port}")

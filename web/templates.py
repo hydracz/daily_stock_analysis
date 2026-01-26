@@ -615,7 +615,9 @@ def render_toast(message: str, toast_type: str = "success") -> str:
 def render_config_page(
     stock_list: str,
     env_filename: str,
-    message: Optional[str] = None
+    message: Optional[str] = None,
+    current_user: str = "guest",
+    is_admin: bool = False
 ) -> bytes:
     """
     渲染配置页面
@@ -999,6 +1001,273 @@ def render_error_page(
     
     page = render_base(
         title=f"错误 {status_code}",
+        content=content
+    )
+    return page.encode("utf-8")
+
+
+def render_login_page() -> bytes:
+    """渲染登录页面"""
+    content = """
+    <div style="max-width: 400px; margin: 100px auto; padding: 30px; background: var(--card); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        <h2 style="text-align: center; margin-bottom: 30px; color: var(--text);">用户登录</h2>
+        <form id="loginForm" method="POST" action="/api/login">
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; color: var(--text); font-weight: 500;">用户名</label>
+                <input type="text" name="username" id="username" required 
+                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;"
+                       autocomplete="username">
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; color: var(--text); font-weight: 500;">密码</label>
+                <input type="password" name="password" id="password" required 
+                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;"
+                       autocomplete="current-password">
+            </div>
+            <div id="errorMsg" style="color: #dc2626; margin-bottom: 15px; display: none;"></div>
+            <button type="submit" 
+                    style="width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: 500; cursor: pointer;">
+                登录
+            </button>
+        </form>
+    </div>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const errorMsg = document.getElementById('errorMsg');
+            
+            // 转换为 URLSearchParams 格式（application/x-www-form-urlencoded）
+            const params = new URLSearchParams();
+            for (const [key, value] of formData.entries()) {
+                params.append(key, value);
+            }
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: params.toString()
+                });
+                
+                // 先读取响应文本（只能读取一次）
+                let responseText;
+                try {
+                    responseText = await response.text();
+                    console.log('登录响应状态:', response.status, response.statusText);
+                    console.log('登录响应文本:', responseText);
+                } catch (e) {
+                    errorMsg.textContent = '读取响应失败: ' + e.message;
+                    errorMsg.style.display = 'block';
+                    console.error('读取响应失败:', e);
+                    return;
+                }
+                
+                // 检查响应状态
+                if (!response.ok) {
+                    // 尝试解析错误信息
+                    try {
+                        const errorData = JSON.parse(responseText);
+                        errorMsg.textContent = errorData.error || `请求失败 (${response.status})`;
+                    } catch (e) {
+                        errorMsg.textContent = `请求失败 (${response.status}): ${responseText.substring(0, 100)}`;
+                    }
+                    errorMsg.style.display = 'block';
+                    return;
+                }
+                
+                // 解析 JSON 响应
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                    console.log('登录响应数据:', data);
+                } catch (e) {
+                    errorMsg.textContent = '服务器响应格式错误，请重试';
+                    errorMsg.style.display = 'block';
+                    console.error('JSON 解析失败:', e, '响应文本:', responseText);
+                    return;
+                }
+                
+                if (data.success) {
+                    // 登录成功，延迟一下再重定向，确保响应完全处理
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 100);
+                } else {
+                    errorMsg.textContent = data.error || '登录失败';
+                    errorMsg.style.display = 'block';
+                }
+            } catch (error) {
+                errorMsg.textContent = '网络错误，请重试: ' + error.message;
+                errorMsg.style.display = 'block';
+                console.error('登录请求失败:', error);
+            }
+        });
+    </script>
+    """
+    
+    page = render_base(
+        title="用户登录",
+        content=content
+    )
+    return page.encode("utf-8")
+
+
+def render_user_manage_page(users: list) -> bytes:
+    """渲染用户管理页面"""
+    users_html = ""
+    for user in users:
+        status = "启用" if user.get('enabled', True) else "禁用"
+        admin_badge = '<span style="background: #dc2626; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-left: 8px;">管理员</span>' if user.get('is_admin') else ""
+        users_html += f"""
+        <tr>
+            <td>{user.get('id')}</td>
+            <td>{html.escape(user.get('username', ''))}{admin_badge}</td>
+            <td>{status}</td>
+            <td>{user.get('created_at', '')[:10] if user.get('created_at') else ''}</td>
+            <td>
+                <button onclick="deleteUser({user.get('id')})" 
+                        style="padding: 4px 12px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                    删除
+                </button>
+            </td>
+        </tr>
+        """
+    
+    content = f"""
+    <div style="max-width: 1000px; margin: 0 auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+            <h2 style="color: var(--text);">用户管理</h2>
+            <button onclick="showCreateUserForm()" 
+                    style="padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">
+                添加用户
+            </button>
+        </div>
+        
+        <div id="createUserForm" style="display: none; margin-bottom: 20px; padding: 20px; background: var(--card); border-radius: 8px;">
+            <h3 style="margin-bottom: 15px;">创建新用户</h3>
+            <form id="createForm" onsubmit="createUser(event)">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 15px; align-items: end;">
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-size: 14px;">用户名</label>
+                        <input type="text" name="username" required 
+                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-size: 14px;">密码</label>
+                        <input type="password" name="password" required 
+                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-size: 14px;">
+                            <input type="checkbox" name="is_admin" style="margin-right: 5px;">管理员
+                        </label>
+                    </div>
+                    <div>
+                        <button type="submit" 
+                                style="padding: 8px 20px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            创建
+                        </button>
+                        <button type="button" onclick="hideCreateUserForm()" 
+                                style="padding: 8px 20px; margin-left: 10px; background: #64748b; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            取消
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        <div id="message" style="display: none; padding: 10px; margin-bottom: 15px; border-radius: 4px;"></div>
+        
+        <table style="width: 100%; border-collapse: collapse; background: var(--card); border-radius: 8px; overflow: hidden;">
+            <thead>
+                <tr style="background: var(--primary); color: white;">
+                    <th style="padding: 12px; text-align: left;">ID</th>
+                    <th style="padding: 12px; text-align: left;">用户名</th>
+                    <th style="padding: 12px; text-align: left;">状态</th>
+                    <th style="padding: 12px; text-align: left;">创建时间</th>
+                    <th style="padding: 12px; text-align: left;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {users_html if users_html else '<tr><td colspan="5" style="text-align: center; padding: 20px;">暂无用户</td></tr>'}
+            </tbody>
+        </table>
+    </div>
+    
+    <script>
+        function showCreateUserForm() {{
+            document.getElementById('createUserForm').style.display = 'block';
+        }}
+        
+        function hideCreateUserForm() {{
+            document.getElementById('createUserForm').style.display = 'none';
+            document.getElementById('createForm').reset();
+        }}
+        
+        async function createUser(e) {{
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            data.is_admin = formData.has('is_admin');
+            
+            try {{
+                const response = await fetch('/api/admin/users', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify(data)
+                }});
+                const result = await response.json();
+                
+                if (result.success) {{
+                    showMessage('用户创建成功', 'success');
+                    hideCreateUserForm();
+                    setTimeout(() => location.reload(), 1000);
+                }} else {{
+                    showMessage(result.error || '创建失败', 'error');
+                }}
+            }} catch (error) {{
+                showMessage('网络错误', 'error');
+            }}
+        }}
+        
+        async function deleteUser(userId) {{
+            if (!confirm('确定要删除此用户吗？')) return;
+            
+            try {{
+                const response = await fetch(`/api/admin/users?id=${{userId}}`, {{
+                    method: 'DELETE'
+                }});
+                const result = await response.json();
+                
+                if (result.success) {{
+                    showMessage('用户删除成功', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                }} else {{
+                    showMessage(result.error || '删除失败', 'error');
+                }}
+            }} catch (error) {{
+                showMessage('网络错误', 'error');
+            }}
+        }}
+        
+        function showMessage(msg, type) {{
+            const msgDiv = document.getElementById('message');
+            msgDiv.textContent = msg;
+            msgDiv.style.display = 'block';
+            msgDiv.style.background = type === 'success' ? '#059669' : '#dc2626';
+            msgDiv.style.color = 'white';
+            setTimeout(() => {{
+                msgDiv.style.display = 'none';
+            }}, 3000);
+        }}
+    </script>
+    """
+    
+    page = render_base(
+        title="用户管理",
         content=content
     )
     return page.encode("utf-8")

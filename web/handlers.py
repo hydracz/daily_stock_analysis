@@ -24,8 +24,11 @@ from datetime import datetime
 from typing import Dict, Any, TYPE_CHECKING
 
 from web.services import get_config_service, get_analysis_service
-from web.templates import render_config_page
+from web.templates import render_config_page, render_login_page, render_user_manage_page
 from src.enums import ReportType
+from src.user_service import get_user_service
+from web.auth import get_auth_manager
+from web.session import get_session_manager
 
 if TYPE_CHECKING:
     from http.server import BaseHTTPRequestHandler
@@ -52,15 +55,47 @@ class Response:
     
     def send(self, handler: 'BaseHTTPRequestHandler') -> None:
         """发送响应到客户端"""
-        handler.send_response(self.status)
-        handler.send_header("Content-Type", self.content_type)
-        handler.send_header("Content-Length", str(len(self.body)))
-        # 添加安全响应头
-        handler.send_header("X-Content-Type-Options", "nosniff")
-        handler.send_header("X-Frame-Options", "DENY")
-        handler.send_header("X-XSS-Protection", "1; mode=block")
-        handler.end_headers()
-        handler.wfile.write(self.body)
+        try:
+            # 确保使用 HTTP/1.1（必须在发送响应前设置，且必须在 send_response 之前）
+            # BaseHTTPRequestHandler 的 send_response 会调用 send_response_only
+            # send_response_only 使用 protocol_version 来构建响应行
+            handler.protocol_version = "HTTP/1.1"
+            
+            # 记录当前协议版本（用于调试）
+            logger.debug(f"[Response] 发送响应前 protocol_version: {handler.protocol_version}")
+            
+            # 发送状态行和响应头
+            # send_response 会自动添加 Server 和 Date 头
+            handler.send_response(self.status)
+            handler.send_header("Content-Type", self.content_type)
+            handler.send_header("Content-Length", str(len(self.body)))
+            # 添加安全响应头（可以暂时放宽用于测试）
+            handler.send_header("X-Content-Type-Options", "nosniff")
+            # handler.send_header("X-Frame-Options", "DENY")  # 暂时注释，允许 iframe 嵌入
+            handler.send_header("X-Frame-Options", "SAMEORIGIN")  # 允许同源 iframe
+            handler.send_header("X-XSS-Protection", "1; mode=block")
+            # 设置 Referrer Policy（允许更多信息传递）
+            handler.send_header("Referrer-Policy", "no-referrer-when-downgrade")
+            # 添加 CORS 头（允许跨域请求）
+            handler.send_header("Access-Control-Allow-Origin", "*")
+            handler.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            handler.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+            handler.send_header("Access-Control-Allow-Credentials", "true")
+            # 结束响应头（这会发送空行分隔头和体）
+            handler.end_headers()
+            
+            # 发送响应体
+            handler.wfile.write(self.body)
+            # 确保数据完全发送
+            handler.wfile.flush()
+            # 注意：不要关闭 wfile，让 BaseHTTPRequestHandler 自动处理连接关闭
+            logger.debug(f"[Response] 响应已发送: {self.status} {len(self.body)} bytes, Content-Type: {self.content_type}")
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            # 客户端已断开连接，忽略错误
+            logger.debug(f"[Response] 客户端已断开连接: {e}")
+        except Exception as e:
+            logger.error(f"[Response] 发送响应失败: {e}", exc_info=True)
+            raise
 
 
 class JsonResponse(Response):
@@ -103,26 +138,75 @@ class PageHandler:
     
     def __init__(self):
         self.config_service = get_config_service()
+        self.user_service = get_user_service()
+        self.auth_manager = get_auth_manager()
     
-    def handle_index(self) -> Response:
+    def handle_index(self, request_handler: 'BaseHTTPRequestHandler') -> Response:
         """处理首页请求 GET /"""
-        stock_list = self.config_service.get_stock_list()
+        # 获取当前用户
+        user_info = self.auth_manager.check_auth(request_handler)
+        if not user_info:
+            user_info = {'user_id': 0, 'username': 'guest', 'is_admin': False}
+        
+        # 获取用户的股票列表
+        if user_info['user_id'] > 0:
+            # 多用户模式：从数据库获取
+            stock_list = self.user_service.get_user_stock_list(user_info['user_id'])
+        else:
+            # 单用户模式或未登录：从 .env 获取
+            stock_list = self.config_service.get_stock_list()
+        
         env_filename = self.config_service.get_env_filename()
-        body = render_config_page(stock_list, env_filename)
+        body = render_config_page(
+            stock_list, 
+            env_filename, 
+            current_user=user_info.get('username', 'guest'),
+            is_admin=user_info.get('is_admin', False)
+        )
         return HtmlResponse(body)
     
-    def handle_update(self, form_data: Dict[str, list]) -> Response:
+    def handle_update(self, form_data: Dict[str, list], request_handler: 'BaseHTTPRequestHandler') -> Response:
         """
         处理配置更新 POST /update
         
         Args:
             form_data: 表单数据
+            request_handler: HTTP 请求处理器（用于获取当前用户）
         """
+        # 获取当前用户
+        user_info = self.auth_manager.check_auth(request_handler)
+        if not user_info:
+            return JsonResponse(
+                {"success": False, "error": "需要登录"},
+                status=HTTPStatus.UNAUTHORIZED
+            )
+        
         stock_list = form_data.get("stock_list", [""])[0]
-        normalized = self.config_service.set_stock_list(stock_list)
+        
+        if user_info['user_id'] > 0:
+            # 多用户模式：保存到数据库
+            normalized = self._normalize_stock_list(stock_list)
+            self.user_service.set_user_stock_list(user_info['user_id'], normalized)
+        else:
+            # 单用户模式：保存到 .env
+            normalized = self.config_service.set_stock_list(stock_list)
+        
         env_filename = self.config_service.get_env_filename()
-        body = render_config_page(normalized, env_filename, message="已保存")
+        body = render_config_page(
+            normalized, 
+            env_filename, 
+            message="已保存",
+            current_user=user_info.get('username', 'guest'),
+            is_admin=user_info.get('is_admin', False)
+        )
         return HtmlResponse(body)
+    
+    @staticmethod
+    def _normalize_stock_list(value: str) -> str:
+        """规范化股票列表格式"""
+        parts = [p.strip() for p in value.replace("\n", ",").split(",")]
+        parts = [p for p in parts if p]
+        return ",".join(parts)
 
 
 # ============================================================
@@ -251,6 +335,181 @@ class ApiHandler:
             )
         
         return JsonResponse({"success": True, "task": task})
+    
+    def handle_login(self, form_data: Dict[str, list]) -> Response:
+        """
+        处理登录请求 POST /api/login
+        
+        Args:
+            form_data: 表单数据（username, password）
+        """
+        username = form_data.get("username", [""])[0].strip()
+        password = form_data.get("password", [""])[0].strip()
+        
+        if not username or not password:
+            return JsonResponse(
+                {"success": False, "error": "用户名和密码不能为空"},
+                status=HTTPStatus.BAD_REQUEST
+            )
+        
+        # 这里需要 request_handler，但路由层已经处理了认证
+        # 所以这里只返回 JSON 响应
+        return JsonResponse(
+            {"success": False, "error": "请使用 Basic Auth 或 Session 登录"},
+            status=HTTPStatus.BAD_REQUEST
+        )
+    
+    def handle_logout(self) -> Response:
+        """处理登出请求 GET /api/logout"""
+        return JsonResponse({"success": True, "message": "已登出"})
+
+
+# ============================================================
+# 用户管理处理器
+# ============================================================
+
+class UserHandler:
+    """用户管理处理器"""
+    
+    def __init__(self):
+        self.user_service = get_user_service()
+        self.auth_manager = get_auth_manager()
+    
+    def handle_login_page(self) -> Response:
+        """显示登录页面 GET /login"""
+        body = render_login_page()
+        return HtmlResponse(body)
+    
+    def handle_login(self, form_data: Dict[str, list], request_handler: 'BaseHTTPRequestHandler') -> Response:
+        """
+        处理登录 POST /api/login
+        
+        Args:
+            form_data: 表单数据
+            request_handler: HTTP 请求处理器（用于设置 Cookie）
+        """
+        try:
+            username = form_data.get("username", [""])[0].strip() if form_data.get("username") else ""
+            password = form_data.get("password", [""])[0].strip() if form_data.get("password") else ""
+            
+            logger.debug(f"[UserHandler] 登录请求 - username: {username}, form_data keys: {list(form_data.keys())}")
+            
+            if not username or not password:
+                logger.warning(f"[UserHandler] 登录失败: 用户名或密码为空")
+                return JsonResponse(
+                    {"success": False, "error": "用户名和密码不能为空"},
+                    status=HTTPStatus.BAD_REQUEST
+                )
+            
+            user_info = self.auth_manager.login(request_handler, username, password)
+            if user_info:
+                logger.info(f"[UserHandler] 登录成功: {username}")
+                return JsonResponse({
+                    "success": True,
+                    "message": "登录成功",
+                    "user": {
+                        "id": user_info['user_id'],
+                        "username": user_info['username'],
+                        "is_admin": user_info['is_admin']
+                    }
+                })
+            else:
+                logger.warning(f"[UserHandler] 登录失败: 用户名或密码错误 - {username}")
+                return JsonResponse(
+                    {"success": False, "error": "用户名或密码错误"},
+                    status=HTTPStatus.UNAUTHORIZED
+                )
+        except Exception as e:
+            logger.error(f"[UserHandler] 登录处理异常: {e}", exc_info=True)
+            return JsonResponse(
+                {"success": False, "error": f"登录处理失败: {str(e)}"},
+                status=HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+    
+    def handle_logout(self, request_handler: 'BaseHTTPRequestHandler') -> Response:
+        """处理登出 GET /api/logout"""
+        self.auth_manager.logout(request_handler)
+        return JsonResponse({"success": True, "message": "已登出"})
+    
+    def handle_user_manage(self, request_handler: 'BaseHTTPRequestHandler') -> Response:
+        """显示用户管理页面 GET /admin/users"""
+        # 检查是否为管理员
+        user_info = self.auth_manager.check_auth(request_handler)
+        if not user_info or not user_info.get('is_admin'):
+            return JsonResponse(
+                {"success": False, "error": "需要管理员权限"},
+                status=HTTPStatus.FORBIDDEN
+            )
+        
+        users = self.user_service.list_users(include_disabled=True)
+        body = render_user_manage_page([u.to_dict() for u in users])
+        return HtmlResponse(body)
+    
+    def handle_create_user(self, form_data: Dict[str, list], request_handler: 'BaseHTTPRequestHandler') -> Response:
+        """创建用户 POST /api/admin/users"""
+        # 检查管理员权限
+        user_info = self.auth_manager.check_auth(request_handler)
+        if not user_info or not user_info.get('is_admin'):
+            return JsonResponse(
+                {"success": False, "error": "需要管理员权限"},
+                status=HTTPStatus.FORBIDDEN
+            )
+        
+        username = form_data.get("username", [""])[0].strip()
+        password = form_data.get("password", [""])[0].strip()
+        is_admin = form_data.get("is_admin", ["false"])[0].lower() == "true"
+        
+        if not username or not password:
+            return JsonResponse(
+                {"success": False, "error": "用户名和密码不能为空"},
+                status=HTTPStatus.BAD_REQUEST
+            )
+        
+        user = self.user_service.create_user(username, password, is_admin=is_admin)
+        if user:
+            return JsonResponse({
+                "success": True,
+                "message": "用户创建成功",
+                "user": user.to_dict()
+            })
+        else:
+            return JsonResponse(
+                {"success": False, "error": "用户名已存在"},
+                status=HTTPStatus.BAD_REQUEST
+            )
+    
+    def handle_delete_user(self, query: Dict[str, list], request_handler: 'BaseHTTPRequestHandler') -> Response:
+        """删除用户 DELETE /api/admin/users?id=xxx"""
+        # 检查管理员权限
+        user_info = self.auth_manager.check_auth(request_handler)
+        if not user_info or not user_info.get('is_admin'):
+            return JsonResponse(
+                {"success": False, "error": "需要管理员权限"},
+                status=HTTPStatus.FORBIDDEN
+            )
+        
+        user_id_list = query.get("id", [])
+        if not user_id_list:
+            return JsonResponse(
+                {"success": False, "error": "缺少用户ID参数"},
+                status=HTTPStatus.BAD_REQUEST
+            )
+        
+        try:
+            user_id = int(user_id_list[0])
+        except ValueError:
+            return JsonResponse(
+                {"success": False, "error": "无效的用户ID"},
+                status=HTTPStatus.BAD_REQUEST
+            )
+        
+        if self.user_service.delete_user(user_id):
+            return JsonResponse({"success": True, "message": "用户删除成功"})
+        else:
+            return JsonResponse(
+                {"success": False, "error": "用户不存在"},
+                status=HTTPStatus.NOT_FOUND
+            )
 
 
 # ============================================================
@@ -311,6 +570,7 @@ class BotHandler:
 _page_handler: PageHandler | None = None
 _api_handler: ApiHandler | None = None
 _bot_handler: BotHandler | None = None
+_user_handler: UserHandler | None = None
 
 
 def get_page_handler() -> PageHandler:
@@ -335,3 +595,11 @@ def get_bot_handler() -> BotHandler:
     if _bot_handler is None:
         _bot_handler = BotHandler()
     return _bot_handler
+
+
+def get_user_handler() -> UserHandler:
+    """获取用户管理处理器实例"""
+    global _user_handler
+    if _user_handler is None:
+        _user_handler = UserHandler()
+    return _user_handler

@@ -36,13 +36,58 @@ class WebRequestHandler(BaseHTTPRequestHandler):
     # 类级别的路由器引用
     router: Router = None  # type: ignore
     
+    # 使用 HTTP/1.1 协议版本
+    protocol_version = "HTTP/1.1"
+    
+    def parse_request(self):
+        """解析请求，确保 request_version 正确设置"""
+        result = super().parse_request()
+        # 如果解析成功，确保 request_version 不是 HTTP/0.9
+        if result and hasattr(self, 'request_version'):
+            if self.request_version == 'HTTP/0.9':
+                logger.warning(f"[WebRequestHandler] 检测到 HTTP/0.9 请求，强制升级为 HTTP/1.1")
+                self.request_version = 'HTTP/1.1'
+            # 确保 protocol_version 与 request_version 一致
+            if self.protocol_version != "HTTP/1.1":
+                self.protocol_version = "HTTP/1.1"
+        return result
+    
     def do_GET(self) -> None:
         """处理 GET 请求"""
-        self.router.dispatch(self, "GET")
+        # 确保使用 HTTP/1.1（必须在处理请求前设置）
+        self.protocol_version = "HTTP/1.1"
+        try:
+            self.router.dispatch(self, "GET")
+        except Exception as e:
+            logger.error(f"[WebRequestHandler] GET 请求处理异常: {e}", exc_info=True)
+            try:
+                self.send_error(500, "Internal Server Error")
+            except Exception:
+                pass
     
     def do_POST(self) -> None:
         """处理 POST 请求"""
-        self.router.dispatch_post(self)
+        # 确保使用 HTTP/1.1（必须在处理请求前设置）
+        self.protocol_version = "HTTP/1.1"
+        try:
+            self.router.dispatch_post(self)
+        except Exception as e:
+            logger.error(f"[WebRequestHandler] POST 请求处理异常: {e}", exc_info=True)
+            try:
+                self.send_error(500, "Internal Server Error")
+            except Exception:
+                pass
+    
+    def do_OPTIONS(self) -> None:
+        """处理 OPTIONS 请求（CORS 预检）"""
+        # 确保使用 HTTP/1.1
+        self.protocol_version = "HTTP/1.1"
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Allow-Credentials", "true")
+        self.end_headers()
     
     def log_message(self, fmt: str, *args) -> None:
         """自定义日志格式（使用 logging 而非 stderr）"""
@@ -102,6 +147,8 @@ class WebServer:
         router = self.router
         
         class Handler(WebRequestHandler):
+            # 确保使用 HTTP/1.1 协议版本
+            protocol_version = "HTTP/1.1"
             pass
         
         Handler.router = router

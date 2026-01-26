@@ -202,6 +202,20 @@ def parse_arguments() -> argparse.Namespace:
         help='仅启动 WebUI 服务，不自动执行分析（通过 /analysis API 手动触发）'
     )
     
+    parser.add_argument(
+        '--webui-host',
+        type=str,
+        default=None,
+        help='WebUI 监听地址（默认 0.0.0.0，可通过 WEBUI_HOST 环境变量或此参数设置）'
+    )
+    
+    parser.add_argument(
+        '--webui-port',
+        type=int,
+        default=None,
+        help='WebUI 监听端口（默认 8000，可通过 WEBUI_PORT 环境变量或此参数设置）'
+    )
+    
     return parser.parse_args()
 
 
@@ -367,13 +381,17 @@ def main() -> int:
         logger.info(f"使用命令行指定的股票列表: {stock_codes}")
     
     # === 启动 WebUI (如果启用) ===
-    # 优先级: 命令行参数 > 配置文件
+    # 优先级: 命令行参数 > 环境变量 > 配置文件
     start_webui = (args.webui or args.webui_only or config.webui_enabled) and os.getenv("GITHUB_ACTIONS") != "true"
+    
+    # 确定 WebUI 监听地址和端口（优先级：命令行参数 > 环境变量 > 配置文件）
+    webui_host = args.webui_host or os.getenv('WEBUI_HOST') or config.webui_host
+    webui_port = args.webui_port or int(os.getenv('WEBUI_PORT', '0')) or config.webui_port
     
     if start_webui:
         try:
             from webui import run_server_in_thread
-            run_server_in_thread(host=config.webui_host, port=config.webui_port)
+            run_server_in_thread(host=webui_host, port=webui_port)
             start_bot_stream_clients(config)
         except Exception as e:
             logger.error(f"启动 WebUI 失败: {e}")
@@ -381,7 +399,7 @@ def main() -> int:
     # === 仅 WebUI 模式：不自动执行分析 ===
     if args.webui_only:
         logger.info("模式: 仅 WebUI 服务")
-        logger.info(f"WebUI 运行中: http://{config.webui_host}:{config.webui_port}")
+        logger.info(f"WebUI 运行中: http://{webui_host}:{webui_port}")
         logger.info("通过 /analysis?code=xxx 接口手动触发分析")
         logger.info("按 Ctrl+C 退出...")
         try:

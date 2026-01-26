@@ -46,6 +46,13 @@ logger = logging.getLogger(__name__)
 # SQLAlchemy ORM 基类
 Base = declarative_base()
 
+# 导入用户模型（确保表被创建）
+try:
+    from src.models import User, UserStockList
+except ImportError:
+    # 如果模型文件不存在，忽略（向后兼容）
+    pass
+
 
 # === 数据模型定义 ===
 
