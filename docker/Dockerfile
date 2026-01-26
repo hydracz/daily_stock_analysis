@@ -31,6 +31,10 @@ COPY web/ ./web/
 COPY bot/ ./bot/
 COPY src/ ./src/
 
+# 复制并设置启动脚本
+COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # 创建数据目录
 RUN mkdir -p /app/data /app/logs /app/reports
 
@@ -51,6 +55,9 @@ VOLUME ["/app/data", "/app/logs", "/app/reports"]
 # 健康检查（支持 WebUI 模式）
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/health || python -c "import sys; sys.exit(0)"
+
+# 设置入口点
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # 默认命令（可被覆盖）
 CMD ["python", "main.py", "--schedule"]

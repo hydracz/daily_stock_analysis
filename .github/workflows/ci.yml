@@ -82,4 +82,7 @@ jobs:
       - name: 🐳 构建镜像
         run: |
           docker build -t stock-analysis:test -f docker/Dockerfile .
+          # 测试基本功能
           docker run --rm stock-analysis:test python -c "print('✅ Docker OK')"
+          # 测试entrypoint脚本（不设置admin变量，应该正常启动）
+          docker run --rm stock-analysis:test python -c "import sys; sys.exit(0)"

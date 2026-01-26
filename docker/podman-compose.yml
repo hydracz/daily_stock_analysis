@@ -41,6 +41,11 @@ x-common: &common
     - WEBUI_HOST=0.0.0.0
     - WEBUI_PORT=8000
 
+    # 管理员账户初始化（可选）
+    # 如果设置了 ADMIN_USERNAME 和 ADMIN_PASSWORD，容器启动时会自动创建/更新管理员账户
+    # - ADMIN_USERNAME=admin
+    # - ADMIN_PASSWORD=your_password_here
+
     # 代理设置（如果需要）
     # - http_proxy=http://host.containers.internal:10809
     # - https_proxy=http://host.containers.internal:10809
