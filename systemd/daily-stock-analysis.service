@@ -1,0 +1,42 @@
+[Unit]
+Description=Daily Stock Analysis Service
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+WorkingDirectory=%h/daily_stock_analysis
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+# 环境变量文件路径（安装脚本会自动检测并设置）
+EnvironmentFile=%h/daily_stock_analysis/.env
+# 如果 .env 文件在其他位置，取消注释并修改路径
+# EnvironmentFile=/path/to/.env
+
+# 启动命令（安装脚本会自动检测 Python 路径并设置）
+ExecStart=/usr/bin/python3 %h/daily_stock_analysis/main.py --webui-only
+# 如果需要定时任务模式，使用以下命令：
+# ExecStart=/usr/bin/python3 %h/daily_stock_analysis/main.py --schedule --webui
+
+# 重启策略
+Restart=always
+RestartSec=10
+StartLimitInterval=300
+StartLimitBurst=5
+
+# 日志配置
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=daily-stock-analysis
+
+# 安全设置
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/daily_stock_analysis/logs
+ReadWritePaths=%h/daily_stock_analysis
+
+[Install]
+WantedBy=multi-user.target
