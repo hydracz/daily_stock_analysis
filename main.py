@@ -392,7 +392,9 @@ def main() -> int:
         try:
             from webui import run_server_in_thread
             run_server_in_thread(host=webui_host, port=webui_port)
-            start_bot_stream_clients(config)
+            # 仅在非 webui-only 模式下启动机器人 Stream 客户端
+            if not args.webui_only:
+                start_bot_stream_clients(config)
         except Exception as e:
             logger.error(f"启动 WebUI 失败: {e}")
     

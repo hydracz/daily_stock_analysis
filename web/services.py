@@ -217,6 +217,21 @@ class AnalysisService:
         tasks.sort(key=lambda x: x.get('start_time', ''), reverse=True)
         return tasks[:limit]
     
+    def _update_progress(self, task_id: str, progress: str, step: Optional[str] = None) -> None:
+        """
+        更新任务进度
+        
+        Args:
+            task_id: 任务ID
+            progress: 进度描述（如 "正在进行新闻搜索"）
+            step: 步骤名称（可选，如 "news_search", "ai_analysis"）
+        """
+        with self._tasks_lock:
+            if task_id in self._tasks:
+                self._tasks[task_id]["progress"] = progress
+                if step:
+                    self._tasks[task_id]["current_step"] = step
+    
     def _run_analysis(
         self, 
         code: str, 
@@ -243,7 +258,9 @@ class AnalysisService:
                 "start_time": datetime.now().isoformat(),
                 "result": None,
                 "error": None,
-                "report_type": report_type.value
+                "report_type": report_type.value,
+                "progress": "正在初始化...",
+                "current_step": "init"
             }
         
         try:
@@ -252,6 +269,7 @@ class AnalysisService:
             from main import StockAnalysisPipeline
             
             logger.info(f"[AnalysisService] 开始分析股票: {code}")
+            self._update_progress(task_id, "正在获取股票数据...", "data_fetch")
             
             # 创建分析管道
             config = get_config()
@@ -261,23 +279,34 @@ class AnalysisService:
                 source_message=source_message
             )
             
-            # 执行单只股票分析（启用单股推送）
+            # 创建进度回调函数
+            def progress_callback(progress: str, step: str) -> None:
+                self._update_progress(task_id, progress, step)
+            
+            # 执行单只股票分析（启用单股推送，传递进度回调）
             result = pipeline.process_single_stock(
                 code=code,
                 skip_analysis=False,
                 single_stock_notify=True,
-                report_type=report_type
+                report_type=report_type,
+                progress_callback=progress_callback
             )
             
             if result:
-                result_data = {
-                    "code": result.code,
-                    "name": result.name,
-                    "sentiment_score": result.sentiment_score,
-                    "operation_advice": result.operation_advice,
-                    "trend_prediction": result.trend_prediction,
-                    "analysis_summary": result.analysis_summary,
-                }
+                # 根据报告类型返回不同的数据
+                if report_type == ReportType.FULL:
+                    # 完整报告：返回所有分析字段
+                    result_data = result.to_dict()
+                else:
+                    # 精简报告：只返回核心字段
+                    result_data = {
+                        "code": result.code,
+                        "name": result.name,
+                        "sentiment_score": result.sentiment_score,
+                        "operation_advice": result.operation_advice,
+                        "trend_prediction": result.trend_prediction,
+                        "analysis_summary": result.analysis_summary,
+                    }
                 
                 with self._tasks_lock:
                     self._tasks[task_id].update({

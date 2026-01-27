@@ -529,10 +529,11 @@ class GeminiAnalyzer:
         config = get_config()
         
         # 检查 OpenAI API Key 是否有效（过滤占位符）
+        # 注意：本地部署的 API 可能使用短 key，所以只检查是否为占位符
         openai_key_valid = (
             config.openai_api_key and 
             not config.openai_api_key.startswith('your_') and 
-            len(config.openai_api_key) > 10
+            len(config.openai_api_key.strip()) > 0  # 只要非空且不是占位符即可
         )
         
         if not openai_key_valid:
@@ -659,6 +660,14 @@ class GeminiAnalyzer:
         max_retries = config.gemini_max_retries
         base_delay = config.gemini_retry_delay
         
+        # 检测应该使用哪个参数名（max_tokens 或 max_completion_tokens）
+        # 默认根据 base_url 判断，如果是本地或 Azure，使用 max_completion_tokens
+        use_max_completion_tokens = False
+        if config.openai_base_url:
+            base_url_lower = config.openai_base_url.lower()
+            if 'azure' in base_url_lower or '127.0.0.1' in base_url_lower or 'localhost' in base_url_lower:
+                use_max_completion_tokens = True
+        
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
@@ -668,15 +677,30 @@ class GeminiAnalyzer:
                     time.sleep(delay)
                 
                 config = get_config()
-                response = self._openai_client.chat.completions.create(
-                    model=self._current_model_name,
-                    messages=[
+                # 限制 max_tokens，避免某些 API 不支持过大的值
+                max_tokens = generation_config.get('max_output_tokens', 8192)
+                # 对于本地部署的 API，可能需要更小的 max_tokens
+                if max_tokens > 4096:
+                    max_tokens = 4096
+                    logger.debug(f"[OpenAI] 限制 max_tokens 为 {max_tokens}，避免 API 限制")
+                
+                # 构建请求参数
+                request_params = {
+                    "model": self._current_model_name,
+                    "messages": [
                         {"role": "system", "content": self.SYSTEM_PROMPT},
                         {"role": "user", "content": prompt}
                     ],
-                    temperature=generation_config.get('temperature', config.openai_temperature),
-                    max_tokens=generation_config.get('max_output_tokens', 8192),
-                )
+                    "temperature": generation_config.get('temperature', config.openai_temperature),
+                }
+                
+                # 根据检测结果使用正确的参数名
+                if use_max_completion_tokens:
+                    request_params["max_completion_tokens"] = max_tokens
+                else:
+                    request_params["max_tokens"] = max_tokens
+                
+                response = self._openai_client.chat.completions.create(**request_params)
                 
                 if response and response.choices and response.choices[0].message.content:
                     return response.choices[0].message.content
@@ -685,12 +709,40 @@ class GeminiAnalyzer:
                     
             except Exception as e:
                 error_str = str(e)
+                # 尝试获取更详细的错误信息
+                error_details = error_str
+                if hasattr(e, 'response') and hasattr(e.response, 'json'):
+                    try:
+                        error_json = e.response.json()
+                        if isinstance(error_json, dict) and 'error' in error_json:
+                            error_details = f"{error_str} | 详细: {error_json.get('error', {})}"
+                    except:
+                        pass
+                
+                # 检测是否需要切换参数名（max_tokens <-> max_completion_tokens）
+                if 'max_tokens' in error_str.lower() and 'max_completion_tokens' in error_str.lower():
+                    # 错误提示需要使用 max_completion_tokens
+                    if not use_max_completion_tokens and attempt == 0:
+                        logger.info("[OpenAI] 检测到需要 max_completion_tokens，切换到 Azure 格式")
+                        use_max_completion_tokens = True
+                        continue  # 立即重试，不等待
+                elif 'max_completion_tokens' in error_str.lower() and 'max_tokens' in error_str.lower():
+                    # 错误提示需要使用 max_tokens
+                    if use_max_completion_tokens and attempt == 0:
+                        logger.info("[OpenAI] 检测到需要 max_tokens，切换到标准格式")
+                        use_max_completion_tokens = False
+                        continue  # 立即重试，不等待
+                
                 is_rate_limit = '429' in error_str or 'rate' in error_str.lower() or 'quota' in error_str.lower()
                 
                 if is_rate_limit:
-                    logger.warning(f"[OpenAI] API 限流，第 {attempt + 1}/{max_retries} 次尝试: {error_str[:100]}")
+                    logger.warning(f"[OpenAI] API 限流，第 {attempt + 1}/{max_retries} 次尝试: {error_details[:200]}")
                 else:
-                    logger.warning(f"[OpenAI] API 调用失败，第 {attempt + 1}/{max_retries} 次尝试: {error_str[:100]}")
+                    logger.warning(f"[OpenAI] API 调用失败，第 {attempt + 1}/{max_retries} 次尝试: {error_details[:200]}")
+                    # 对于 400 错误，提供更详细的诊断信息
+                    if '400' in error_str or 'badrequest' in error_str.lower():
+                        logger.error(f"[OpenAI] 400 错误诊断: 模型={self._current_model_name}, base_url={config.openai_base_url}")
+                        logger.error(f"[OpenAI] 请检查: 1) 模型名称是否正确 2) API endpoint 是否支持该模型 3) 请求参数是否有效")
                 
                 if attempt == max_retries - 1:
                     raise
@@ -744,7 +796,7 @@ class GeminiAnalyzer:
                 if response and response.text:
                     return response.text
                 else:
-                    raise ValueError("Gemini 返回空响应")
+                    raise ValueError("AI API 返回空响应")
                     
             except Exception as e:
                 last_error = e
@@ -831,6 +883,12 @@ class GeminiAnalyzer:
         
         # 如果模型不可用，返回默认结果
         if not self.is_available():
+            # 根据实际配置提示用户
+            if config.openai_api_key or config.openai_base_url:
+                api_hint = "OpenAI API Key"
+            else:
+                api_hint = "Gemini 或 OpenAI API Key"
+            
             return AnalysisResult(
                 code=code,
                 name=name,
@@ -839,9 +897,9 @@ class GeminiAnalyzer:
                 operation_advice='持有',
                 confidence_level='低',
                 analysis_summary='AI 分析功能未启用（未配置 API Key）',
-                risk_warning='请配置 Gemini API Key 后重试',
+                risk_warning=f'请配置 {api_hint} 后重试',
                 success=False,
-                error_message='Gemini API Key 未配置',
+                error_message=f'{api_hint} 未配置',
             )
         
         try:
@@ -865,14 +923,21 @@ class GeminiAnalyzer:
             logger.info(f"[LLM Prompt 预览]\n{prompt_preview}")
             logger.debug(f"=== 完整 Prompt ({len(prompt)}字符) ===\n{prompt}\n=== End Prompt ===")
 
-            # 设置生成配置（从配置文件读取温度参数）
+            # 设置生成配置（根据实际使用的 API 选择温度参数）
             config = get_config()
+            if self._use_openai:
+                temperature = config.openai_temperature
+                api_name = "OpenAI 兼容 API"
+            else:
+                temperature = config.gemini_temperature
+                api_name = "Gemini API"
+            
             generation_config = {
-                "temperature": config.gemini_temperature,
+                "temperature": temperature,
                 "max_output_tokens": 8192,
             }
 
-            logger.info(f"[LLM调用] 开始调用 Gemini API (temperature={generation_config['temperature']}, max_tokens={generation_config['max_output_tokens']})...")
+            logger.info(f"[LLM调用] 开始调用 {api_name} (temperature={generation_config['temperature']}, max_tokens={generation_config['max_output_tokens']})...")
             
             # 使用带重试的 API 调用
             start_time = time.time()
@@ -880,12 +945,12 @@ class GeminiAnalyzer:
             elapsed = time.time() - start_time
             
             # 记录响应信息
-            logger.info(f"[LLM返回] Gemini API 响应成功, 耗时 {elapsed:.2f}s, 响应长度 {len(response_text)} 字符")
+            logger.info(f"[LLM返回] {api_name} 响应成功, 耗时 {elapsed:.2f}s, 响应长度 {len(response_text)} 字符")
             
             # 记录响应预览（INFO级别）和完整响应（DEBUG级别）
             response_preview = response_text[:300] + "..." if len(response_text) > 300 else response_text
             logger.info(f"[LLM返回 预览]\n{response_preview}")
-            logger.debug(f"=== Gemini 完整响应 ({len(response_text)}字符) ===\n{response_text}\n=== End Response ===")
+            logger.debug(f"=== {api_name} 完整响应 ({len(response_text)}字符) ===\n{response_text}\n=== End Response ===")
             
             # 解析响应
             result = self._parse_response(response_text, code, name)
@@ -1121,10 +1186,11 @@ class GeminiAnalyzer:
         name: str
     ) -> AnalysisResult:
         """
-        解析 Gemini 响应（决策仪表盘版）
+        解析 AI 响应（决策仪表盘版）
         
         尝试从响应中提取 JSON 格式的分析结果，包含 dashboard 字段
         如果解析失败，尝试智能提取或返回默认结果
+        支持 Gemini 和 OpenAI 兼容 API 的响应格式
         """
         try:
             # 清理响应文本：移除 markdown 代码块标记

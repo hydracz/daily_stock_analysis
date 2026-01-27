@@ -305,8 +305,8 @@ class ApiHandler:
                 status=HTTPStatus.BAD_REQUEST
             )
         
-        # 获取报告类型参数（默认精简报告）
-        report_type_str = query.get("report_type", ["simple"])[0]
+        # 获取报告类型参数（默认完整报告）
+        report_type_str = query.get("report_type", ["full"])[0]
         report_type = ReportType.from_str(report_type_str)
         
         # 提交异步分析任务

@@ -441,6 +441,17 @@ button:active {
     gap: 0.2rem;
 }
 
+.task-progress {
+    color: var(--primary);
+    font-weight: 500;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
 /* Task Result Badge */
 .task-result {
     display: flex;
@@ -546,6 +557,37 @@ button:active {
     background: white;
     border-radius: 0.25rem;
     line-height: 1.4;
+}
+
+.task-detail-section {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+}
+
+.task-detail-section:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+
+.task-detail-section h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.task-detail-text {
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background: white;
+    border-radius: 0.25rem;
+    line-height: 1.5;
+    font-size: 0.75rem;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-wrap: break-word;
 }
 """
 
@@ -711,7 +753,14 @@ def render_config_page(
         
         let statusIcon = '⏳';
         let statusText = '等待中';
-        if (status === 'running') { statusIcon = '<span class="spinner"></span>'; statusText = '分析中'; }
+        if (status === 'running') { 
+            statusIcon = '<span class="spinner"></span>'; 
+            statusText = '分析中';
+            // 显示进度信息
+            if (task.progress) {
+                statusText = task.progress;
+            }
+        }
         else if (status === 'completed') { statusIcon = '✓'; statusText = '完成'; }
         else if (status === 'failed') { statusIcon = '✗'; statusText = '失败'; }
         
@@ -728,10 +777,140 @@ def render_config_page(
         
         let detailHtml = '';
         if (status === 'completed') {
-            detailHtml = '<div class="task-detail" id="detail_' + taskId + '">' +
-                '<div class="task-detail-row"><span class="label">趋势</span><span>' + (result.trend_prediction || '-') + '</span></div>' +
-                (result.analysis_summary ? '<div class="task-detail-summary">' + result.analysis_summary.substring(0, 100) + '...</div>' : '') +
-                '</div>';
+            const isFullReport = task.report_type === 'full';
+            let detailContent = '';
+            
+            if (isFullReport) {
+                // 完整报告：显示所有详细分析内容
+                detailContent = '<div class="task-detail-row"><span class="label">趋势</span><span>' + (result.trend_prediction || '-') + '</span></div>' +
+                    '<div class="task-detail-row"><span class="label">置信度</span><span>' + (result.confidence_level || '-') + '</span></div>';
+                
+                // 决策仪表盘
+                if (result.dashboard) {
+                    const dashboard = result.dashboard;
+                    if (dashboard.core_conclusion) {
+                        const core = dashboard.core_conclusion;
+                        detailContent += '<div class="task-detail-section"><h4>📊 核心结论</h4>' +
+                            '<div class="task-detail-row"><span class="label">一句话结论</span><span>' + (core.one_sentence || '-') + '</span></div>' +
+                            '<div class="task-detail-row"><span class="label">信号类型</span><span>' + (core.signal_type || '-') + '</span></div>' +
+                            '<div class="task-detail-row"><span class="label">时间敏感度</span><span>' + (core.time_sensitivity || '-') + '</span></div>';
+                        if (core.position_advice) {
+                            detailContent += '<div class="task-detail-row"><span class="label">空仓建议</span><span>' + (core.position_advice.no_position || '-') + '</span></div>' +
+                                '<div class="task-detail-row"><span class="label">持仓建议</span><span>' + (core.position_advice.has_position || '-') + '</span></div>';
+                        }
+                        detailContent += '</div>';
+                    }
+                    
+                    if (dashboard.data_perspective) {
+                        const data = dashboard.data_perspective;
+                        detailContent += '<div class="task-detail-section"><h4>📈 数据视角</h4>';
+                        if (data.trend_status) {
+                            detailContent += '<div class="task-detail-row"><span class="label">均线排列</span><span>' + (data.trend_status.ma_alignment || '-') + '</span></div>' +
+                                '<div class="task-detail-row"><span class="label">趋势评分</span><span>' + (data.trend_status.trend_score || '-') + '</span></div>';
+                        }
+                        if (data.price_position) {
+                            detailContent += '<div class="task-detail-row"><span class="label">当前价格</span><span>' + (data.price_position.current_price || '-') + '</span></div>' +
+                                '<div class="task-detail-row"><span class="label">MA5</span><span>' + (data.price_position.ma5 || '-') + '</span></div>' +
+                                '<div class="task-detail-row"><span class="label">乖离率</span><span>' + (data.price_position.bias_ma5 || '-') + '%</span></div>' +
+                                '<div class="task-detail-row"><span class="label">乖离状态</span><span>' + (data.price_position.bias_status || '-') + '</span></div>';
+                        }
+                        if (data.chip_structure) {
+                            detailContent += '<div class="task-detail-row"><span class="label">获利比例</span><span>' + (data.chip_structure.profit_ratio || '-') + '%</span></div>' +
+                                '<div class="task-detail-row"><span class="label">筹码健康度</span><span>' + (data.chip_structure.chip_health || '-') + '</span></div>';
+                        }
+                        detailContent += '</div>';
+                    }
+                    
+                    if (dashboard.intelligence) {
+                        const intel = dashboard.intelligence;
+                        detailContent += '<div class="task-detail-section"><h4>🔍 情报分析</h4>';
+                        if (intel.latest_news) {
+                            detailContent += '<div class="task-detail-row"><span class="label">最新消息</span><span>' + intel.latest_news + '</span></div>';
+                        }
+                        if (intel.risk_alerts && intel.risk_alerts.length > 0) {
+                            detailContent += '<div class="task-detail-row"><span class="label">风险警报</span><span>' + intel.risk_alerts.join('; ') + '</span></div>';
+                        }
+                        if (intel.positive_catalysts && intel.positive_catalysts.length > 0) {
+                            detailContent += '<div class="task-detail-row"><span class="label">利好因素</span><span>' + intel.positive_catalysts.join('; ') + '</span></div>';
+                        }
+                        if (intel.earnings_outlook) {
+                            detailContent += '<div class="task-detail-row"><span class="label">业绩预期</span><span>' + intel.earnings_outlook + '</span></div>';
+                        }
+                        detailContent += '</div>';
+                    }
+                    
+                    if (dashboard.battle_plan) {
+                        const plan = dashboard.battle_plan;
+                        detailContent += '<div class="task-detail-section"><h4>🎯 作战计划</h4>';
+                        if (plan.sniper_points) {
+                            detailContent += '<div class="task-detail-row"><span class="label">理想买入点</span><span>' + (plan.sniper_points.ideal_buy || '-') + '</span></div>' +
+                                '<div class="task-detail-row"><span class="label">次优买入点</span><span>' + (plan.sniper_points.secondary_buy || '-') + '</span></div>' +
+                                '<div class="task-detail-row"><span class="label">止损位</span><span>' + (plan.sniper_points.stop_loss || '-') + '</span></div>' +
+                                '<div class="task-detail-row"><span class="label">目标位</span><span>' + (plan.sniper_points.take_profit || '-') + '</span></div>';
+                        }
+                        if (plan.action_checklist && plan.action_checklist.length > 0) {
+                            detailContent += '<div class="task-detail-row"><span class="label">检查清单</span><span>' + plan.action_checklist.join(' | ') + '</span></div>';
+                        }
+                        detailContent += '</div>';
+                    }
+                }
+                
+                // 详细分析内容
+                if (result.technical_analysis) {
+                    detailContent += '<div class="task-detail-section"><h4>📊 技术面分析</h4>' +
+                        '<div class="task-detail-text">' + result.technical_analysis + '</div></div>';
+                }
+                if (result.ma_analysis) {
+                    detailContent += '<div class="task-detail-section"><h4>📈 均线分析</h4>' +
+                        '<div class="task-detail-text">' + result.ma_analysis + '</div></div>';
+                }
+                if (result.volume_analysis) {
+                    detailContent += '<div class="task-detail-section"><h4>📊 量能分析</h4>' +
+                        '<div class="task-detail-text">' + result.volume_analysis + '</div></div>';
+                }
+                if (result.trend_analysis) {
+                    detailContent += '<div class="task-detail-section"><h4>📉 走势分析</h4>' +
+                        '<div class="task-detail-text">' + result.trend_analysis + '</div></div>';
+                }
+                if (result.short_term_outlook) {
+                    detailContent += '<div class="task-detail-section"><h4>⏰ 短期展望</h4>' +
+                        '<div class="task-detail-text">' + result.short_term_outlook + '</div></div>';
+                }
+                if (result.medium_term_outlook) {
+                    detailContent += '<div class="task-detail-section"><h4>📅 中期展望</h4>' +
+                        '<div class="task-detail-text">' + result.medium_term_outlook + '</div></div>';
+                }
+                if (result.fundamental_analysis) {
+                    detailContent += '<div class="task-detail-section"><h4>🏢 基本面分析</h4>' +
+                        '<div class="task-detail-text">' + result.fundamental_analysis + '</div></div>';
+                }
+                if (result.news_summary) {
+                    detailContent += '<div class="task-detail-section"><h4>📰 新闻摘要</h4>' +
+                        '<div class="task-detail-text">' + result.news_summary + '</div></div>';
+                }
+                if (result.key_points) {
+                    detailContent += '<div class="task-detail-section"><h4>💡 核心看点</h4>' +
+                        '<div class="task-detail-text">' + result.key_points + '</div></div>';
+                }
+                if (result.risk_warning) {
+                    detailContent += '<div class="task-detail-section"><h4>⚠️ 风险提示</h4>' +
+                        '<div class="task-detail-text">' + result.risk_warning + '</div></div>';
+                }
+                if (result.buy_reason) {
+                    detailContent += '<div class="task-detail-section"><h4>💭 操作理由</h4>' +
+                        '<div class="task-detail-text">' + result.buy_reason + '</div></div>';
+                }
+                if (result.analysis_summary) {
+                    detailContent += '<div class="task-detail-section"><h4>📝 综合分析</h4>' +
+                        '<div class="task-detail-text">' + result.analysis_summary + '</div></div>';
+                }
+            } else {
+                // 精简报告：只显示核心信息
+                detailContent = '<div class="task-detail-row"><span class="label">趋势</span><span>' + (result.trend_prediction || '-') + '</span></div>' +
+                    (result.analysis_summary ? '<div class="task-detail-summary">' + result.analysis_summary.substring(0, 200) + (result.analysis_summary.length > 200 ? '...' : '') + '</div>' : '');
+            }
+            
+            detailHtml = '<div class="task-detail" id="detail_' + taskId + '">' + detailContent + '</div>';
         }
         
         return '<div class="task-card ' + status + '" id="task_' + taskId + '" onclick="toggleDetail(\\''+taskId+'\\')">' +
@@ -745,6 +924,7 @@ def render_config_page(
                     '<span>⏱ ' + formatTime(task.start_time) + '</span>' +
                     '<span>⏳ ' + calcDuration(task.start_time, task.end_time) + '</span>' +
                     '<span>' + (task.report_type === 'full' ? '📊完整' : '📝精简') + '</span>' +
+                    (status === 'running' && task.progress ? '<span class="task-progress">' + task.progress + '</span>' : '') +
                 '</div>' +
             '</div>' +
             resultHtml +
@@ -929,8 +1109,8 @@ def render_config_page(
               autocomplete="off"
           />
           <select id="report_type" class="report-select" title="选择报告类型">
+            <option value="full" selected>📊 完整报告</option>
             <option value="simple">📝 精简报告</option>
-            <option value="full">📊 完整报告</option>
           </select>
           <button type="button" id="analysis_btn" class="btn-analysis" onclick="submitAnalysis()" disabled>
             🚀 分析

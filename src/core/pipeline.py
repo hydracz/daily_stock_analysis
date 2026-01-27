@@ -15,7 +15,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Callable
 
 from src.config import get_config, Config
 from src.storage import get_db
@@ -136,7 +136,7 @@ class StockAnalysisPipeline:
             logger.error(f"[{code}] {error_msg}")
             return False, error_msg
     
-    def analyze_stock(self, code: str) -> Optional[AnalysisResult]:
+    def analyze_stock(self, code: str, progress_callback: Optional[Callable[[str, str], None]] = None) -> Optional[AnalysisResult]:
         """
         分析单只股票（增强版：含量比、换手率、筹码分析、多维度情报）
         
@@ -159,6 +159,8 @@ class StockAnalysisPipeline:
             stock_name = STOCK_NAME_MAP.get(code, '')
             
             # Step 1: 获取实时行情（量比、换手率等）- 使用统一入口，自动故障切换
+            if progress_callback:
+                progress_callback("正在获取实时行情...", "realtime")
             realtime_quote = None
             try:
                 realtime_quote = self.fetcher_manager.get_realtime_quote(code)
@@ -182,6 +184,8 @@ class StockAnalysisPipeline:
                 stock_name = f'股票{code}'
             
             # Step 2: 获取筹码分布 - 使用统一入口，带熔断保护
+            if progress_callback:
+                progress_callback("正在获取筹码分布...", "chip")
             chip_data = None
             try:
                 chip_data = self.fetcher_manager.get_chip_distribution(code)
@@ -194,6 +198,8 @@ class StockAnalysisPipeline:
                 logger.warning(f"[{code}] 获取筹码分布失败: {e}")
             
             # Step 3: 趋势分析（基于交易理念）
+            if progress_callback:
+                progress_callback("正在进行趋势分析...", "trend")
             trend_result: Optional[TrendAnalysisResult] = None
             try:
                 # 获取历史数据进行趋势分析
@@ -212,6 +218,8 @@ class StockAnalysisPipeline:
             # Step 4: 多维度情报搜索（最新消息+风险排查+业绩预期）
             news_context = None
             if self.search_service.is_available:
+                if progress_callback:
+                    progress_callback("正在进行新闻搜索...", "news_search")
                 logger.info(f"[{code}] 开始多维度情报搜索...")
                 
                 # 使用多维度搜索（最多5次搜索）
@@ -233,6 +241,8 @@ class StockAnalysisPipeline:
                 logger.info(f"[{code}] 搜索服务不可用，跳过情报搜索")
             
             # Step 5: 获取分析上下文（技术面数据）
+            if progress_callback:
+                progress_callback("正在准备AI分析...", "prepare_ai")
             context = self.db.get_analysis_context(code)
             
             if context is None:
@@ -370,7 +380,8 @@ class StockAnalysisPipeline:
         code: str,
         skip_analysis: bool = False,
         single_stock_notify: bool = False,
-        report_type: ReportType = ReportType.SIMPLE
+        report_type: ReportType = ReportType.SIMPLE,
+        progress_callback: Optional[Callable[[str, str], None]] = None
     ) -> Optional[AnalysisResult]:
         """
         处理单只股票的完整流程
@@ -396,6 +407,8 @@ class StockAnalysisPipeline:
         
         try:
             # Step 1: 获取并保存数据
+            if progress_callback:
+                progress_callback("正在获取股票数据...", "data_fetch")
             success, error = self.fetch_and_save_stock_data(code)
             
             if not success:
@@ -407,7 +420,7 @@ class StockAnalysisPipeline:
                 logger.info(f"[{code}] 跳过 AI 分析（dry-run 模式）")
                 return None
             
-            result = self.analyze_stock(code)
+            result = self.analyze_stock(code, progress_callback=progress_callback)
             
             if result:
                 logger.info(
