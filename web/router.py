@@ -159,8 +159,19 @@ class Router:
             route = self.match(path, method)
             if route:
                 try:
-                    response = route.handler(query)
-                    response.send(request_handler)
+                    # 检查处理器是否需要 request_handler 参数
+                    import inspect
+                    try:
+                        sig = inspect.signature(route.handler)
+                        if 'request_handler' in sig.parameters or len(sig.parameters) > 1:
+                            response = route.handler(query, request_handler)
+                        else:
+                            response = route.handler(query)
+                    except Exception:
+                        # 如果检查失败，尝试直接调用
+                        response = route.handler(query)
+                    if response:
+                        response.send(request_handler)
                     return
                 except Exception as e:
                     logger.error(f"[Router] 处理请求失败: {method} {path} - {e}")
@@ -509,6 +520,36 @@ def create_default_router() -> Router:
         "/api/admin/users", "DELETE",
         lambda q, rh: user_handler.handle_delete_user(q, rh),
         "删除用户"
+    )
+    
+    router.register(
+        "/api/admin/users", "GET",
+        lambda q, rh: user_handler.handle_get_user_detail(q, rh),
+        "获取用户详情"
+    )
+    
+    router.register(
+        "/api/admin/users/password", "POST",
+        lambda form, rh: user_handler.handle_update_user_password(form, rh),
+        "修改用户密码（管理员）"
+    )
+    
+    router.register(
+        "/api/admin/users/role", "POST",
+        lambda form, rh: user_handler.handle_update_user_role(form, rh),
+        "修改用户角色"
+    )
+    
+    router.register(
+        "/api/admin/users/status", "POST",
+        lambda form, rh: user_handler.handle_update_user_status(form, rh),
+        "启用/禁用用户"
+    )
+    
+    router.register(
+        "/api/users/password", "POST",
+        lambda form, rh: user_handler.handle_update_user_password(form, rh),
+        "修改自己的密码"
     )
     
     # === Bot Webhook 路由 ===

@@ -22,14 +22,13 @@ import logging
 from email.utils import formatdate
 from http import HTTPStatus
 from datetime import datetime
-from typing import Dict, Any, TYPE_CHECKING
+from typing import Dict, Any, Optional, TYPE_CHECKING
 
 from web.services import get_config_service, get_analysis_service
 from web.templates import render_config_page, render_login_page, render_user_manage_page
 from src.enums import ReportType
 from src.user_service import get_user_service
 from web.auth import get_auth_manager
-from web.session import get_session_manager
 
 if TYPE_CHECKING:
     from http.server import BaseHTTPRequestHandler
@@ -158,6 +157,54 @@ class HtmlResponse(Response):
             status=status,
             content_type="text/html; charset=utf-8"
         )
+
+
+class RedirectResponse(Response):
+    """重定向响应封装"""
+    
+    def __init__(self, location: str):
+        redirect_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="refresh" content="0;url={location}">
+    <title>正在跳转...</title>
+</head>
+<body>
+    <p>正在跳转，<a href="{location}">点击这里</a>如果页面没有自动跳转。</p>
+</body>
+</html>
+""".encode('utf-8')
+        super().__init__(
+            body=redirect_html,
+            status=HTTPStatus.FOUND,
+            content_type="text/html; charset=utf-8"
+        )
+        self.location = location
+    
+    def _build_response_headers(self, handler: 'BaseHTTPRequestHandler', custom_headers: list[str]) -> list[str]:
+        """构建完整的响应头列表（包含 Location 头）"""
+        headers = [
+            f"Server: {handler.version_string()}\r\n",
+            f"Date: {formatdate(timeval=None, localtime=False, usegmt=True)}\r\n",
+            f"Location: {self.location}\r\n",
+            f"Content-Type: {self.content_type}\r\n",
+            f"Content-Length: {len(self.body)}\r\n",
+        ]
+        
+        # 添加自定义响应头（如 Set-Cookie）
+        headers.extend(custom_headers)
+        
+        # 添加标准安全响应头
+        headers.extend([
+            "X-Content-Type-Options: nosniff\r\n",
+            "X-Frame-Options: SAMEORIGIN\r\n",
+            "X-XSS-Protection: 1; mode=block\r\n",
+            "Referrer-Policy: no-referrer-when-downgrade\r\n",
+            "\r\n",  # 空行，分隔响应头和响应体
+        ])
+        return headers
 
 
 # ============================================================
@@ -367,32 +414,6 @@ class ApiHandler:
         
         return JsonResponse({"success": True, "task": task})
     
-    def handle_login(self, form_data: Dict[str, list]) -> Response:
-        """
-        处理登录请求 POST /api/login
-        
-        Args:
-            form_data: 表单数据（username, password）
-        """
-        username = form_data.get("username", [""])[0].strip()
-        password = form_data.get("password", [""])[0].strip()
-        
-        if not username or not password:
-            return JsonResponse(
-                {"success": False, "error": "用户名和密码不能为空"},
-                status=HTTPStatus.BAD_REQUEST
-            )
-        
-        # 这里需要 request_handler，但路由层已经处理了认证
-        # 所以这里只返回 JSON 响应
-        return JsonResponse(
-            {"success": False, "error": "请使用 Basic Auth 或 Session 登录"},
-            status=HTTPStatus.BAD_REQUEST
-        )
-    
-    def handle_logout(self) -> Response:
-        """处理登出请求 GET /api/logout"""
-        return JsonResponse({"success": True, "message": "已登出"})
 
 
 # ============================================================
@@ -405,6 +426,41 @@ class UserHandler:
     def __init__(self):
         self.user_service = get_user_service()
         self.auth_manager = get_auth_manager()
+    
+    def _require_admin(self, request_handler: 'BaseHTTPRequestHandler') -> Optional[Dict[str, Any]]:
+        """
+        检查管理员权限
+        
+        Returns:
+            用户信息字典，如果不是管理员返回 None
+        """
+        user_info = self.auth_manager.check_auth(request_handler)
+        if not user_info or not user_info.get('is_admin'):
+            return None
+        return user_info
+    
+    def _parse_user_id(self, query: Dict[str, list], param_name: str = "id") -> tuple[Optional[int], Optional[Response]]:
+        """
+        解析用户ID参数
+        
+        Returns:
+            (user_id, error_response) 元组，如果解析失败返回 (None, error_response)
+        """
+        user_id_list = query.get(param_name, [])
+        if not user_id_list:
+            return None, JsonResponse(
+                {"success": False, "error": f"缺少{param_name}参数"},
+                status=HTTPStatus.BAD_REQUEST
+            )
+        
+        try:
+            user_id = int(user_id_list[0])
+            return user_id, None
+        except ValueError:
+            return None, JsonResponse(
+                {"success": False, "error": f"无效的{param_name}"},
+                status=HTTPStatus.BAD_REQUEST
+            )
     
     def handle_login_page(self) -> Response:
         """显示登录页面 GET /login"""
@@ -460,13 +516,13 @@ class UserHandler:
     def handle_logout(self, request_handler: 'BaseHTTPRequestHandler') -> Response:
         """处理登出 GET /api/logout"""
         self.auth_manager.logout(request_handler)
-        return JsonResponse({"success": True, "message": "已登出"})
+        # 重定向到登录页面
+        return RedirectResponse('/login')
     
     def handle_user_manage(self, request_handler: 'BaseHTTPRequestHandler') -> Response:
         """显示用户管理页面 GET /admin/users"""
-        # 检查是否为管理员
-        user_info = self.auth_manager.check_auth(request_handler)
-        if not user_info or not user_info.get('is_admin'):
+        user_info = self._require_admin(request_handler)
+        if not user_info:
             return JsonResponse(
                 {"success": False, "error": "需要管理员权限"},
                 status=HTTPStatus.FORBIDDEN
@@ -478,9 +534,8 @@ class UserHandler:
     
     def handle_create_user(self, form_data: Dict[str, list], request_handler: 'BaseHTTPRequestHandler') -> Response:
         """创建用户 POST /api/admin/users"""
-        # 检查管理员权限
-        user_info = self.auth_manager.check_auth(request_handler)
-        if not user_info or not user_info.get('is_admin'):
+        user_info = self._require_admin(request_handler)
+        if not user_info:
             return JsonResponse(
                 {"success": False, "error": "需要管理员权限"},
                 status=HTTPStatus.FORBIDDEN
@@ -511,31 +566,142 @@ class UserHandler:
     
     def handle_delete_user(self, query: Dict[str, list], request_handler: 'BaseHTTPRequestHandler') -> Response:
         """删除用户 DELETE /api/admin/users?id=xxx"""
-        # 检查管理员权限
-        user_info = self.auth_manager.check_auth(request_handler)
-        if not user_info or not user_info.get('is_admin'):
+        user_info = self._require_admin(request_handler)
+        if not user_info:
             return JsonResponse(
                 {"success": False, "error": "需要管理员权限"},
                 status=HTTPStatus.FORBIDDEN
             )
         
-        user_id_list = query.get("id", [])
-        if not user_id_list:
-            return JsonResponse(
-                {"success": False, "error": "缺少用户ID参数"},
-                status=HTTPStatus.BAD_REQUEST
-            )
-        
-        try:
-            user_id = int(user_id_list[0])
-        except ValueError:
-            return JsonResponse(
-                {"success": False, "error": "无效的用户ID"},
-                status=HTTPStatus.BAD_REQUEST
-            )
+        user_id, error_response = self._parse_user_id(query)
+        if error_response:
+            return error_response
         
         if self.user_service.delete_user(user_id):
             return JsonResponse({"success": True, "message": "用户删除成功"})
+        else:
+            return JsonResponse(
+                {"success": False, "error": "用户不存在"},
+                status=HTTPStatus.NOT_FOUND
+            )
+    
+    def handle_get_user_detail(self, query: Dict[str, list], request_handler: 'BaseHTTPRequestHandler') -> Response:
+        """获取用户详情 GET /api/admin/users?id=xxx"""
+        user_info = self._require_admin(request_handler)
+        if not user_info:
+            return JsonResponse(
+                {"success": False, "error": "需要管理员权限"},
+                status=HTTPStatus.FORBIDDEN
+            )
+        
+        user_id, error_response = self._parse_user_id(query)
+        if error_response:
+            return error_response
+        
+        user = self.user_service.get_user(user_id=user_id)
+        if not user:
+            return JsonResponse(
+                {"success": False, "error": "用户不存在"},
+                status=HTTPStatus.NOT_FOUND
+            )
+        
+        # 获取用户的股票列表
+        stock_list = self.user_service.get_user_stock_list(user_id)
+        
+        user_dict = user.to_dict()
+        user_dict['stock_list'] = stock_list
+        
+        return JsonResponse({
+            "success": True,
+            "user": user_dict
+        })
+    
+    def handle_update_user_password(self, form_data: Dict[str, list], request_handler: 'BaseHTTPRequestHandler') -> Response:
+        """修改用户密码 PUT /api/admin/users/password 或 PUT /api/users/password"""
+        user_info = self.auth_manager.check_auth(request_handler)
+        if not user_info:
+            return JsonResponse(
+                {"success": False, "error": "需要登录"},
+                status=HTTPStatus.UNAUTHORIZED
+            )
+        
+        # 获取目标用户ID（管理员可以修改任何用户，普通用户只能修改自己）
+        target_user_id_list = form_data.get("user_id", [])
+        if target_user_id_list:
+            # 管理员修改其他用户密码
+            if not user_info.get('is_admin'):
+                return JsonResponse(
+                    {"success": False, "error": "需要管理员权限"},
+                    status=HTTPStatus.FORBIDDEN
+                )
+            try:
+                target_user_id = int(target_user_id_list[0])
+            except ValueError:
+                return JsonResponse(
+                    {"success": False, "error": "无效的用户ID"},
+                    status=HTTPStatus.BAD_REQUEST
+                )
+        else:
+            # 普通用户修改自己的密码
+            target_user_id = user_info['user_id']
+        
+        password = form_data.get("password", [""])[0].strip()
+        if not password:
+            return JsonResponse(
+                {"success": False, "error": "密码不能为空"},
+                status=HTTPStatus.BAD_REQUEST
+            )
+        
+        if self.user_service.update_user(target_user_id, password=password):
+            return JsonResponse({"success": True, "message": "密码修改成功"})
+        else:
+            return JsonResponse(
+                {"success": False, "error": "用户不存在"},
+                status=HTTPStatus.NOT_FOUND
+            )
+    
+    def handle_update_user_role(self, form_data: Dict[str, list], request_handler: 'BaseHTTPRequestHandler') -> Response:
+        """修改用户角色 PUT /api/admin/users/role"""
+        user_info = self._require_admin(request_handler)
+        if not user_info:
+            return JsonResponse(
+                {"success": False, "error": "需要管理员权限"},
+                status=HTTPStatus.FORBIDDEN
+            )
+        
+        user_id, error_response = self._parse_user_id(form_data, "user_id")
+        if error_response:
+            return error_response
+        
+        is_admin_str = form_data.get("is_admin", ["false"])[0].lower()
+        is_admin = is_admin_str == "true"
+        
+        if self.user_service.update_user(user_id, is_admin=is_admin):
+            return JsonResponse({"success": True, "message": "角色修改成功"})
+        else:
+            return JsonResponse(
+                {"success": False, "error": "用户不存在"},
+                status=HTTPStatus.NOT_FOUND
+            )
+    
+    def handle_update_user_status(self, form_data: Dict[str, list], request_handler: 'BaseHTTPRequestHandler') -> Response:
+        """启用/禁用用户 PUT /api/admin/users/status"""
+        user_info = self._require_admin(request_handler)
+        if not user_info:
+            return JsonResponse(
+                {"success": False, "error": "需要管理员权限"},
+                status=HTTPStatus.FORBIDDEN
+            )
+        
+        user_id, error_response = self._parse_user_id(form_data, "user_id")
+        if error_response:
+            return error_response
+        
+        enabled_str = form_data.get("enabled", ["true"])[0].lower()
+        enabled = enabled_str == "true"
+        
+        if self.user_service.update_user(user_id, enabled=enabled):
+            return JsonResponse({"success": True, "message": "状态修改成功"})
         else:
             return JsonResponse(
                 {"success": False, "error": "用户不存在"},

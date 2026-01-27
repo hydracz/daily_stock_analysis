@@ -672,6 +672,115 @@ def render_config_page(
     safe_value = html.escape(stock_list)
     toast_html = render_toast(message) if message else ""
     
+    # 用户信息区域（如果已登录）
+    user_info_html = ""
+    password_modal_html = ""
+    if current_user != "guest":
+        admin_link = f'<a href="/admin/users" style="color: var(--primary); text-decoration: none; margin-left: 10px;">👥 用户管理</a>' if is_admin else ""
+        user_info_html = f"""
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border);">
+        <div>
+            <span style="color: var(--text-light);">当前用户: <strong>{html.escape(current_user)}</strong></span>
+            {admin_link}
+        </div>
+        <div>
+            <button onclick="showChangePasswordModal()" 
+                    style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                🔑 修改密码
+            </button>
+            <a href="/api/logout" 
+               style="padding: 6px 12px; margin-left: 8px; background: var(--text-light); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; text-decoration: none; display: inline-block;">
+                🚪 退出
+            </a>
+        </div>
+    </div>
+        """
+        
+        # 修改密码模态框
+        password_modal_html = """
+    <!-- 修改密码模态框 -->
+    <div id="changePasswordModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 30px; border-radius: 8px; max-width: 400px; margin: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h3 style="margin-top: 0;">修改密码</h3>
+            <form id="changePasswordForm" onsubmit="changePassword(event)">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">新密码</label>
+                    <input type="password" id="changePasswordInput" name="password" required 
+                           style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                </div>
+                <div id="changePasswordMsg" style="display: none; margin-bottom: 15px; padding: 10px; border-radius: 4px;"></div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" 
+                            style="flex: 1; padding: 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        确定
+                    </button>
+                    <button type="button" onclick="closeChangePasswordModal()" 
+                            style="flex: 1; padding: 10px; background: var(--text-light); color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        取消
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        function showChangePasswordModal() {
+            document.getElementById('changePasswordModal').style.display = 'flex';
+            document.getElementById('changePasswordInput').value = '';
+            document.getElementById('changePasswordMsg').style.display = 'none';
+        }
+        
+        function closeChangePasswordModal() {
+            document.getElementById('changePasswordModal').style.display = 'none';
+            document.getElementById('changePasswordForm').reset();
+        }
+        
+        async function changePassword(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            const msgDiv = document.getElementById('changePasswordMsg');
+            
+            try {
+                const response = await fetch('/api/users/password', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                
+                msgDiv.style.display = 'block';
+                if (result.success) {
+                    msgDiv.textContent = '密码修改成功';
+                    msgDiv.style.background = '#059669';
+                    msgDiv.style.color = 'white';
+                    setTimeout(() => {
+                        closeChangePasswordModal();
+                        alert('密码修改成功，请重新登录');
+                        window.location.href = '/api/logout';
+                    }, 1500);
+                } else {
+                    msgDiv.textContent = result.error || '密码修改失败';
+                    msgDiv.style.background = '#dc2626';
+                    msgDiv.style.color = 'white';
+                }
+            } catch (error) {
+                msgDiv.style.display = 'block';
+                msgDiv.textContent = '网络错误: ' + error.message;
+                msgDiv.style.background = '#dc2626';
+                msgDiv.style.color = 'white';
+            }
+        }
+        
+        // 点击模态框外部关闭
+        document.addEventListener('click', function(e) {
+            if (e.target.id === 'changePasswordModal') {
+                closeChangePasswordModal();
+            }
+        });
+    </script>
+        """
+    
     # 分析组件的 JavaScript - 支持多任务
     analysis_js = """
 <script>
@@ -1096,6 +1205,7 @@ def render_config_page(
     content = f"""
   <div class="container">
     <h2>📈 A/H股分析</h2>
+    {user_info_html}
     
     <!-- 快速分析区域 -->
     <div class="analysis-section" style="margin-top: 0; padding-top: 0; border-top: none;">
@@ -1144,6 +1254,7 @@ def render_config_page(
     </div>
   </div>
   
+  {password_modal_html}
   {toast_html}
   {analysis_js}
 """
@@ -1295,10 +1406,28 @@ def render_user_manage_page(users: list) -> bytes:
             <td>{status}</td>
             <td>{user.get('created_at', '')[:10] if user.get('created_at') else ''}</td>
             <td>
-                <button onclick="deleteUser({user.get('id')})" 
-                        style="padding: 4px 12px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
-                    删除
-                </button>
+                <div style="display: flex; gap: 5px;">
+                    <button onclick="viewUserDetail({user.get('id')})" 
+                            style="padding: 4px 12px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                        详情
+                    </button>
+                    <button onclick="editUserPassword({user.get('id')}, '{html.escape(user.get('username', ''))}')" 
+                            style="padding: 4px 12px; background: #059669; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                        密码
+                    </button>
+                    <button onclick="editUserRole({user.get('id')}, {str(user.get('is_admin', False)).lower()})" 
+                            style="padding: 4px 12px; background: #d97706; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                        角色
+                    </button>
+                    <button onclick="toggleUserStatus({user.get('id')}, {str(user.get('enabled', True)).lower()})" 
+                            style="padding: 4px 12px; background: #7c3aed; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                        {'禁用' if user.get('enabled', True) else '启用'}
+                    </button>
+                    <button onclick="deleteUser({user.get('id')})" 
+                            style="padding: 4px 12px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                        删除
+                    </button>
+                </div>
             </td>
         </tr>
         """
@@ -1364,6 +1493,57 @@ def render_user_manage_page(users: list) -> bytes:
         </table>
     </div>
     
+    <!-- 用户详情模态框 -->
+    <div id="userDetailModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 30px; border-radius: 8px; max-width: 600px; max-height: 80vh; overflow-y: auto; margin: 20px;">
+            <h3 style="margin-top: 0;">用户详情</h3>
+            <div id="userDetailContent"></div>
+            <button onclick="closeUserDetail()" style="margin-top: 20px; padding: 10px 20px; background: var(--text-light); color: white; border: none; border-radius: 4px; cursor: pointer;">关闭</button>
+        </div>
+    </div>
+    
+    <!-- 修改密码模态框 -->
+    <div id="passwordModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 30px; border-radius: 8px; max-width: 400px; margin: 20px;">
+            <h3 style="margin-top: 0;">修改密码</h3>
+            <form id="passwordForm" onsubmit="updatePassword(event)">
+                <input type="hidden" id="passwordUserId" name="user_id">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px;">用户名</label>
+                    <input type="text" id="passwordUsername" readonly style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; background: #f5f5f5;">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px;">新密码</label>
+                    <input type="password" id="newPassword" name="password" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" style="flex: 1; padding: 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">确定</button>
+                    <button type="button" onclick="closePasswordModal()" style="flex: 1; padding: 10px; background: var(--text-light); color: white; border: none; border-radius: 4px; cursor: pointer;">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- 修改角色模态框 -->
+    <div id="roleModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 30px; border-radius: 8px; max-width: 400px; margin: 20px;">
+            <h3 style="margin-top: 0;">修改角色</h3>
+            <form id="roleForm" onsubmit="updateRole(event)">
+                <input type="hidden" id="roleUserId" name="user_id">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" id="roleIsAdmin" name="is_admin" style="margin-right: 8px; width: 18px; height: 18px;">
+                        <span>设为管理员</span>
+                    </label>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" style="flex: 1; padding: 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">确定</button>
+                    <button type="button" onclick="closeRoleModal()" style="flex: 1; padding: 10px; background: var(--text-light); color: white; border: none; border-radius: 4px; cursor: pointer;">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <script>
         function showCreateUserForm() {{
             document.getElementById('createUserForm').style.display = 'block';
@@ -1420,6 +1600,137 @@ def render_user_manage_page(users: list) -> bytes:
             }}
         }}
         
+        async function viewUserDetail(userId) {{
+            try {{
+                const response = await fetch(`/api/admin/users?id=${{userId}}`);
+                const result = await response.json();
+                
+                if (result.success && result.user) {{
+                    const user = result.user;
+                    const stockList = user.stock_list || '';
+                    const content = `
+                        <div style="line-height: 1.8;">
+                            <p><strong>用户ID:</strong> ${{user.id}}</p>
+                            <p><strong>用户名:</strong> ${{user.username}}</p>
+                            <p><strong>角色:</strong> ${{user.is_admin ? '管理员' : '普通用户'}}</p>
+                            <p><strong>状态:</strong> ${{user.enabled ? '启用' : '禁用'}}</p>
+                            <p><strong>创建时间:</strong> ${{user.created_at || '-'}}</p>
+                            <p><strong>更新时间:</strong> ${{user.updated_at || '-'}}</p>
+                            <p><strong>股票列表配置:</strong></p>
+                            <textarea readonly style="width: 100%; min-height: 100px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 12px;">${{stockList}}</textarea>
+                        </div>
+                    `;
+                    document.getElementById('userDetailContent').innerHTML = content;
+                    document.getElementById('userDetailModal').style.display = 'flex';
+                }} else {{
+                    showMessage(result.error || '获取用户详情失败', 'error');
+                }}
+            }} catch (error) {{
+                showMessage('网络错误', 'error');
+            }}
+        }}
+        
+        function closeUserDetail() {{
+            document.getElementById('userDetailModal').style.display = 'none';
+        }}
+        
+        function editUserPassword(userId, username) {{
+            document.getElementById('passwordUserId').value = userId;
+            document.getElementById('passwordUsername').value = username;
+            document.getElementById('newPassword').value = '';
+            document.getElementById('passwordModal').style.display = 'flex';
+        }}
+        
+        function closePasswordModal() {{
+            document.getElementById('passwordModal').style.display = 'none';
+            document.getElementById('passwordForm').reset();
+        }}
+        
+        async function updatePassword(e) {{
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {{
+                const response = await fetch('/api/admin/users/password', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify(data)
+                }});
+                const result = await response.json();
+                
+                if (result.success) {{
+                    showMessage('密码修改成功', 'success');
+                    closePasswordModal();
+                }} else {{
+                    showMessage(result.error || '密码修改失败', 'error');
+                }}
+            }} catch (error) {{
+                showMessage('网络错误', 'error');
+            }}
+        }}
+        
+        function editUserRole(userId, isAdmin) {{
+            document.getElementById('roleUserId').value = userId;
+            document.getElementById('roleIsAdmin').checked = isAdmin;
+            document.getElementById('roleModal').style.display = 'flex';
+        }}
+        
+        function closeRoleModal() {{
+            document.getElementById('roleModal').style.display = 'none';
+        }}
+        
+        async function updateRole(e) {{
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            data.is_admin = formData.has('is_admin');
+            
+            try {{
+                const response = await fetch('/api/admin/users/role', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify(data)
+                }});
+                const result = await response.json();
+                
+                if (result.success) {{
+                    showMessage('角色修改成功', 'success');
+                    closeRoleModal();
+                    setTimeout(() => location.reload(), 1000);
+                }} else {{
+                    showMessage(result.error || '角色修改失败', 'error');
+                }}
+            }} catch (error) {{
+                showMessage('网络错误', 'error');
+            }}
+        }}
+        
+        async function toggleUserStatus(userId, currentStatus) {{
+            const newStatus = !currentStatus;
+            const action = newStatus ? '启用' : '禁用';
+            
+            if (!confirm(`确定要${{action}}此用户吗？`)) return;
+            
+            try {{
+                const response = await fetch('/api/admin/users/status', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{user_id: userId, enabled: newStatus}})
+                }});
+                const result = await response.json();
+                
+                if (result.success) {{
+                    showMessage(`用户${{action}}成功`, 'success');
+                    setTimeout(() => location.reload(), 1000);
+                }} else {{
+                    showMessage(result.error || `${{action}}失败`, 'error');
+                }}
+            }} catch (error) {{
+                showMessage('网络错误', 'error');
+            }}
+        }}
+        
         function showMessage(msg, type) {{
             const msgDiv = document.getElementById('message');
             msgDiv.textContent = msg;
@@ -1430,6 +1741,13 @@ def render_user_manage_page(users: list) -> bytes:
                 msgDiv.style.display = 'none';
             }}, 3000);
         }}
+        
+        // 点击模态框外部关闭
+        document.addEventListener('click', function(e) {{
+            if (e.target.id === 'userDetailModal') closeUserDetail();
+            if (e.target.id === 'passwordModal') closePasswordModal();
+            if (e.target.id === 'roleModal') closeRoleModal();
+        }});
     </script>
     """
     
