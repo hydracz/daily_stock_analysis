@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import re
 import logging
+from email.utils import formatdate
 from http import HTTPStatus
 from datetime import datetime
 from typing import Dict, Any, TYPE_CHECKING
@@ -54,48 +55,78 @@ class Response:
         self.content_type = content_type
     
     def send(self, handler: 'BaseHTTPRequestHandler') -> None:
-        """发送响应到客户端"""
+        """
+        发送响应到客户端
+        
+        完全绕过 BaseHTTPRequestHandler 的响应发送机制，手动构建并发送 HTTP/1.1 响应。
+        这样可以确保使用正确的协议版本，避免 curl 等客户端报 HTTP/0.9 错误。
+        """
         try:
-            # 确保使用 HTTP/1.1（必须在发送响应前设置，且必须在 send_response 之前）
-            # BaseHTTPRequestHandler 的 send_response 会调用 send_response_only
-            # send_response_only 使用 protocol_version 来构建响应行
+            # 确保使用 HTTP/1.1 协议版本
             handler.protocol_version = "HTTP/1.1"
+            if hasattr(handler, 'request_version'):
+                handler.request_version = "HTTP/1.1"
             
-            # 记录当前协议版本（用于调试）
-            logger.debug(f"[Response] 发送响应前 protocol_version: {handler.protocol_version}")
+            # 收集通过 send_header 设置的响应头（如 Set-Cookie）
+            collected_headers = self._collect_custom_headers(handler)
             
-            # 发送状态行和响应头
-            # send_response 会自动添加 Server 和 Date 头
-            handler.send_response(self.status)
-            handler.send_header("Content-Type", self.content_type)
-            handler.send_header("Content-Length", str(len(self.body)))
-            # 添加安全响应头（可以暂时放宽用于测试）
-            handler.send_header("X-Content-Type-Options", "nosniff")
-            # handler.send_header("X-Frame-Options", "DENY")  # 暂时注释，允许 iframe 嵌入
-            handler.send_header("X-Frame-Options", "SAMEORIGIN")  # 允许同源 iframe
-            handler.send_header("X-XSS-Protection", "1; mode=block")
-            # 设置 Referrer Policy（允许更多信息传递）
-            handler.send_header("Referrer-Policy", "no-referrer-when-downgrade")
-            # 添加 CORS 头（允许跨域请求）
-            handler.send_header("Access-Control-Allow-Origin", "*")
-            handler.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            handler.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-            handler.send_header("Access-Control-Allow-Credentials", "true")
-            # 结束响应头（这会发送空行分隔头和体）
-            handler.end_headers()
+            # 手动构建并发送 HTTP/1.1 响应行
+            status_line = f"HTTP/1.1 {self.status.value} {self.status.phrase}\r\n"
+            handler.wfile.write(status_line.encode('ascii'))
+            
+            # 构建并发送所有响应头
+            headers = self._build_response_headers(handler, collected_headers)
+            handler.wfile.write(''.join(headers).encode('ascii'))
             
             # 发送响应体
             handler.wfile.write(self.body)
-            # 确保数据完全发送
             handler.wfile.flush()
-            # 注意：不要关闭 wfile，让 BaseHTTPRequestHandler 自动处理连接关闭
+            
             logger.debug(f"[Response] 响应已发送: {self.status} {len(self.body)} bytes, Content-Type: {self.content_type}")
         except (BrokenPipeError, ConnectionResetError, OSError) as e:
-            # 客户端已断开连接，忽略错误
             logger.debug(f"[Response] 客户端已断开连接: {e}")
         except Exception as e:
             logger.error(f"[Response] 发送响应失败: {e}", exc_info=True)
             raise
+    
+    def _collect_custom_headers(self, handler: 'BaseHTTPRequestHandler') -> list[str]:
+        """收集通过 send_header 设置的响应头（如 Set-Cookie）"""
+        collected = []
+        if hasattr(handler, '_headers_buffer') and handler._headers_buffer:
+            for header_line in handler._headers_buffer:
+                if isinstance(header_line, tuple) and len(header_line) == 2:
+                    collected.append(f"{header_line[0]}: {header_line[1]}\r\n")
+                elif isinstance(header_line, bytes):
+                    collected.append(header_line.decode('ascii', errors='replace'))
+                elif isinstance(header_line, str):
+                    collected.append(header_line)
+        return collected
+    
+    def _build_response_headers(self, handler: 'BaseHTTPRequestHandler', custom_headers: list[str]) -> list[str]:
+        """构建完整的响应头列表"""
+        headers = [
+            f"Server: {handler.version_string()}\r\n",
+            f"Date: {formatdate(timeval=None, localtime=False, usegmt=True)}\r\n",
+            f"Content-Type: {self.content_type}\r\n",
+            f"Content-Length: {len(self.body)}\r\n",
+        ]
+        
+        # 添加自定义响应头（如 Set-Cookie）
+        headers.extend(custom_headers)
+        
+        # 添加标准安全响应头
+        headers.extend([
+            "X-Content-Type-Options: nosniff\r\n",
+            "X-Frame-Options: SAMEORIGIN\r\n",
+            "X-XSS-Protection: 1; mode=block\r\n",
+            "Referrer-Policy: no-referrer-when-downgrade\r\n",
+            "Access-Control-Allow-Origin: *\r\n",
+            "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n",
+            "Access-Control-Allow-Headers: Content-Type, Authorization\r\n",
+            "Access-Control-Allow-Credentials: true\r\n",
+            "\r\n",  # 空行，分隔响应头和响应体
+        ])
+        return headers
 
 
 class JsonResponse(Response):

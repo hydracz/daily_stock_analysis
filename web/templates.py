@@ -1049,25 +1049,15 @@ def render_login_page() -> bytes:
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
                     },
-                    body: params.toString()
+                    body: params.toString(),
+                    credentials: 'same-origin'  // 确保发送 Cookie
                 });
                 
-                // 先读取响应文本（只能读取一次）
-                let responseText;
-                try {
-                    responseText = await response.text();
-                    console.log('登录响应状态:', response.status, response.statusText);
-                    console.log('登录响应文本:', responseText);
-                } catch (e) {
-                    errorMsg.textContent = '读取响应失败: ' + e.message;
-                    errorMsg.style.display = 'block';
-                    console.error('读取响应失败:', e);
-                    return;
-                }
+                // 读取响应文本
+                const responseText = await response.text();
                 
                 // 检查响应状态
                 if (!response.ok) {
-                    // 尝试解析错误信息
                     try {
                         const errorData = JSON.parse(responseText);
                         errorMsg.textContent = errorData.error || `请求失败 (${response.status})`;
@@ -1082,19 +1072,16 @@ def render_login_page() -> bytes:
                 let data;
                 try {
                     data = JSON.parse(responseText);
-                    console.log('登录响应数据:', data);
                 } catch (e) {
                     errorMsg.textContent = '服务器响应格式错误，请重试';
                     errorMsg.style.display = 'block';
-                    console.error('JSON 解析失败:', e, '响应文本:', responseText);
+                    console.error('JSON 解析失败:', e);
                     return;
                 }
                 
                 if (data.success) {
-                    // 登录成功，延迟一下再重定向，确保响应完全处理
-                    setTimeout(() => {
-                        window.location.href = '/';
-                    }, 100);
+                    // 登录成功，重定向到首页
+                    window.location.href = '/';
                 } else {
                     errorMsg.textContent = data.error || '登录失败';
                     errorMsg.style.display = 'block';
