@@ -256,6 +256,24 @@ button:active {
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
+.force-refresh-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+    font-size: 0.875rem;
+    color: var(--text);
+    cursor: pointer;
+    user-select: none;
+}
+
+.force-refresh-wrap input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
 .btn-analysis {
     background-color: var(--success);
 }
@@ -340,7 +358,7 @@ button:active {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.6rem 0.75rem;
+    padding: 0.65rem 0.85rem;
     background: var(--bg);
     border-radius: 0.5rem;
     border: 1px solid var(--border);
@@ -435,15 +453,28 @@ button:active {
 
 .task-meta {
     display: flex;
-    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
     font-size: 0.7rem;
     color: var(--text-light);
 }
 
 .task-meta span {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 0.2rem;
+    white-space: nowrap;
+}
+
+.task-cache-badge {
+    font-size: 0.65rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.25rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-light);
+    white-space: nowrap;
 }
 
 .task-progress {
@@ -473,6 +504,7 @@ button:active {
     border-radius: 0.25rem;
     background: var(--primary);
     color: white;
+    white-space: nowrap;
 }
 
 .task-advice.buy { background: #059669; }
@@ -483,6 +515,7 @@ button:active {
 .task-score {
     font-size: 0.7rem;
     color: var(--text-light);
+    white-space: nowrap;
 }
 
 /* Task Actions */
@@ -1068,6 +1101,7 @@ def render_config_page(
     const submitBtn = document.getElementById('analysis_btn');
     const taskList = document.getElementById('task_list');
     const reportTypeSelect = document.getElementById('report_type');
+    const forceRefreshCheckbox = document.getElementById('force_refresh');
     
     // 任务管理
     const tasks = new Map(); // taskId -> {task, pollCount}
@@ -1312,6 +1346,8 @@ def render_config_page(
                     '<span>⏱ ' + formatTime(task.start_time) + '</span>' +
                     '<span>⏳ ' + calcDuration(task.start_time, task.end_time) + '</span>' +
                     '<span>' + (task.report_type === 'full' ? '📊完整' : '📝精简') + '</span>' +
+                    (status === 'completed' && task.report_generated_at ? '<span title="报告生成时间">🕐 ' + formatTime(task.report_generated_at) + '</span>' : '') +
+                    (status === 'completed' && task.from_cache === true ? '<span class="task-cache-badge">缓存结果</span>' : '') +
                     (status === 'running' && task.progress ? '<span class="task-progress">' + task.progress + '</span>' : '') +
                 '</div>' +
             '</div>' +
@@ -1430,7 +1466,10 @@ def render_config_page(
         submitBtn.textContent = '提交中...';
         
         const reportType = reportTypeSelect.value;
-        fetch('/analysis?code=' + encodeURIComponent(code) + '&report_type=' + encodeURIComponent(reportType))
+        const forceRefresh = forceRefreshCheckbox && forceRefreshCheckbox.checked;
+        const url = '/analysis?code=' + encodeURIComponent(code) + '&report_type=' + encodeURIComponent(reportType) +
+            (forceRefresh ? '&force_refresh=true' : '');
+        fetch(url)
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
@@ -1501,6 +1540,10 @@ def render_config_page(
             <option value="full" selected>📊 完整报告</option>
             <option value="simple">📝 精简报告</option>
           </select>
+          <label class="force-refresh-wrap" title="开启后忽略历史缓存，重新拉取数据并生成报告">
+            <input type="checkbox" id="force_refresh" />
+            强制刷新
+          </label>
           <button type="button" id="analysis_btn" class="btn-analysis" onclick="submitAnalysis()" disabled>
             🚀 分析
           </button>

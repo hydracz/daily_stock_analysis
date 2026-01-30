@@ -173,7 +173,8 @@ class AnalysisService:
         self, 
         code: str, 
         report_type: Union[ReportType, str] = ReportType.SIMPLE,
-        source_message: Optional[BotMessage] = None
+        source_message: Optional[BotMessage] = None,
+        force_refresh: bool = False,
     ) -> Dict[str, Any]:
         """
         提交异步分析任务
@@ -192,7 +193,7 @@ class AnalysisService:
         task_id = f"{code}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
         
         # 提交到线程池
-        self.executor.submit(self._run_analysis, code, task_id, report_type, source_message)
+        self.executor.submit(self._run_analysis, code, task_id, report_type, source_message, force_refresh)
         
         logger.info(f"[AnalysisService] 已提交股票 {code} 的分析任务, task_id={task_id}, report_type={report_type.value}")
         
@@ -237,7 +238,8 @@ class AnalysisService:
         code: str, 
         task_id: str, 
         report_type: ReportType = ReportType.SIMPLE,
-        source_message: Optional[BotMessage] = None
+        source_message: Optional[BotMessage] = None,
+        force_refresh: bool = False,
     ) -> Dict[str, Any]:
         """
         执行单只股票分析
@@ -283,13 +285,14 @@ class AnalysisService:
             def progress_callback(progress: str, step: str) -> None:
                 self._update_progress(task_id, progress, step)
             
-            # 执行单只股票分析（启用单股推送，传递进度回调）
-            result = pipeline.process_single_stock(
+            # 执行单只股票分析（启用单股推送，传递进度回调与是否强制刷新）
+            result, meta = pipeline.process_single_stock(
                 code=code,
                 skip_analysis=False,
                 single_stock_notify=True,
                 report_type=report_type,
-                progress_callback=progress_callback
+                progress_callback=progress_callback,
+                force_refresh=force_refresh,
             )
             
             if result:
@@ -312,7 +315,9 @@ class AnalysisService:
                     self._tasks[task_id].update({
                         "status": "completed",
                         "end_time": datetime.now().isoformat(),
-                        "result": result_data
+                        "result": result_data,
+                        "from_cache": meta.get("from_cache", False),
+                        "report_generated_at": meta.get("report_generated_at"),
                     })
                 
                 logger.info(f"[AnalysisService] 股票 {code} 分析完成: {result.operation_advice}")

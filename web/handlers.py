@@ -355,10 +355,15 @@ class ApiHandler:
         # 获取报告类型参数（默认完整报告）
         report_type_str = query.get("report_type", ["full"])[0]
         report_type = ReportType.from_str(report_type_str)
+        # 强制刷新：默认关闭，开启后忽略历史缓存并重新拉数、分析、保存
+        force_refresh_str = query.get("force_refresh", ["false"])[0]
+        force_refresh = str(force_refresh_str).lower() in ("1", "true", "yes")
         
         # 提交异步分析任务
         try:
-            result = self.analysis_service.submit_analysis(code, report_type=report_type)
+            result = self.analysis_service.submit_analysis(
+                code, report_type=report_type, force_refresh=force_refresh
+            )
             return JsonResponse(result)
         except Exception as e:
             logger.error(f"[ApiHandler] 提交分析任务失败: {e}")
