@@ -110,6 +110,10 @@ class Config:
     
     # === 数据库配置 ===
     database_path: str = "./data/stock_analysis.db"
+
+    # === 分析历史存储（按股票+日期缓存，减少外部 API 调用）===
+    enable_analysis_history: bool = True  # 是否启用分析历史缓存
+    analysis_history_dir: str = "./analysis_history"  # 历史存储根目录
     
     # === 日志配置 ===
     log_dir: str = "./logs"  # 日志文件目录
@@ -332,6 +336,8 @@ class Config:
             feishu_max_bytes=int(os.getenv('FEISHU_MAX_BYTES', '20000')),
             wechat_max_bytes=int(os.getenv('WECHAT_MAX_BYTES', '4000')),
             database_path=os.getenv('DATABASE_PATH', './data/stock_analysis.db'),
+            enable_analysis_history=os.getenv('ENABLE_ANALYSIS_HISTORY', 'true').lower() == 'true',
+            analysis_history_dir=os.getenv('ANALYSIS_HISTORY_DIR', './analysis_history'),
             log_dir=os.getenv('LOG_DIR', './logs'),
             log_level=os.getenv('LOG_LEVEL', 'INFO'),
             max_workers=int(os.getenv('MAX_WORKERS', '3')),

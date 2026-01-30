@@ -14,11 +14,18 @@ A股自选股智能分析系统 - 核心分析流水线
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date
+from datetime import date, datetime
 from typing import List, Dict, Any, Optional, Tuple, Callable
 
 from src.config import get_config, Config
 from src.storage import get_db
+from src.analysis_history import (
+    is_history_enabled,
+    has_cached_analysis,
+    load_cached_analysis,
+    save_analysis as save_analysis_history,
+    META_ANALYZED_AT_KEY,
+)
 from data_provider import DataFetcherManager
 from data_provider.realtime_types import ChipDistribution
 from src.analyzer import GeminiAnalyzer, AnalysisResult, STOCK_NAME_MAP
@@ -136,7 +143,7 @@ class StockAnalysisPipeline:
             logger.error(f"[{code}] {error_msg}")
             return False, error_msg
     
-    def analyze_stock(self, code: str, progress_callback: Optional[Callable[[str, str], None]] = None) -> Optional[AnalysisResult]:
+    def analyze_stock(self, code: str, progress_callback: Optional[Callable[[str, str], None]] = None) -> Tuple[Optional[AnalysisResult], Optional[Dict[str, Any]]]:
         """
         分析单只股票（增强版：含量比、换手率、筹码分析、多维度情报）
         
@@ -152,7 +159,7 @@ class StockAnalysisPipeline:
             code: 股票代码
             
         Returns:
-            AnalysisResult 或 None（如果分析失败）
+            (AnalysisResult 或 None, 历史运行数据 dict 或 None)
         """
         try:
             # 获取股票名称（优先从实时行情获取真实名称）
@@ -269,12 +276,23 @@ class StockAnalysisPipeline:
             # Step 7: 调用 AI 分析（传入增强的上下文和新闻）
             result = self.analyzer.analyze(enhanced_context, news_context=news_context)
             
-            return result
+            # 收集本次运行数据，供历史存储使用（按股票+日期缓存，减少 API 调用）
+            run_data = None
+            if result and is_history_enabled():
+                run_data = {
+                    'data_daily': context,
+                    'data_realtime': realtime_quote.to_dict() if realtime_quote and hasattr(realtime_quote, 'to_dict') else (realtime_quote.__dict__ if realtime_quote else None),
+                    'data_chip': chip_data.to_dict() if chip_data and hasattr(chip_data, 'to_dict') else (chip_data.__dict__ if chip_data else None),
+                    'data_trend': trend_result.to_dict() if trend_result and hasattr(trend_result, 'to_dict') else (trend_result.__dict__ if trend_result else None),
+                    'data_intel': news_context,
+                }
+            
+            return result, run_data
             
         except Exception as e:
             logger.error(f"[{code}] 分析失败: {e}")
             logger.exception(f"[{code}] 详细错误信息:")
-            return None
+            return None, None
     
     def _enhance_context(
         self,
@@ -381,35 +399,41 @@ class StockAnalysisPipeline:
         skip_analysis: bool = False,
         single_stock_notify: bool = False,
         report_type: ReportType = ReportType.SIMPLE,
-        progress_callback: Optional[Callable[[str, str], None]] = None
-    ) -> Optional[AnalysisResult]:
+        progress_callback: Optional[Callable[[str, str], None]] = None,
+        force_refresh: bool = False,
+    ) -> Tuple[Optional[AnalysisResult], Dict[str, Any]]:
         """
-        处理单只股票的完整流程
-
-        包括：
-        1. 获取数据
-        2. 保存数据
-        3. AI 分析
-        4. 单股推送（可选，#55）
-
-        此方法会被线程池调用，需要处理好异常
-
-        Args:
-            code: 股票代码
-            skip_analysis: 是否跳过 AI 分析
-            single_stock_notify: 是否启用单股推送模式（每分析完一只立即推送）
-            report_type: 报告类型枚举（从配置读取，Issue #119）
+        处理单只股票的完整流程（含历史缓存与强制刷新）。
 
         Returns:
-            AnalysisResult 或 None
+            (AnalysisResult 或 None, meta) 其中 meta 含 from_cache、report_generated_at
         """
         logger.info(f"========== 开始处理 {code} ==========")
+        today = date.today()
+        meta = {"from_cache": False, "report_generated_at": None}
         
         try:
-            # Step 1: 获取并保存数据
+            # 历史缓存：同一天内已成功分析且未强制刷新时，按报告类型返回缓存
+            if not skip_analysis and not force_refresh and is_history_enabled() and has_cached_analysis(code, today):
+                cached = load_cached_analysis(code, today, report_type=report_type.value)
+                if cached and cached.get("result"):
+                    result = cached["result"]
+                    report_content = cached.get("report_content", "")
+                    meta["from_cache"] = True
+                    meta["report_generated_at"] = (cached.get("meta") or {}).get(META_ANALYZED_AT_KEY)
+                    logger.info(f"[{code}] 使用历史缓存结果（日期: {today}，报告类型: {report_type.value}）")
+                    if single_stock_notify and self.notifier.is_available() and report_content:
+                        try:
+                            if self.notifier.send(report_content):
+                                logger.info(f"[{code}] 单股推送成功（缓存）")
+                        except Exception as e:
+                            logger.error(f"[{code}] 单股推送异常: {e}")
+                    return result, meta
+            
+            # Step 1: 获取并保存数据（强制刷新时忽略今日缓存）
             if progress_callback:
                 progress_callback("正在获取股票数据...", "data_fetch")
-            success, error = self.fetch_and_save_stock_data(code)
+            success, error = self.fetch_and_save_stock_data(code, force_refresh=force_refresh)
             
             if not success:
                 logger.warning(f"[{code}] 数据获取失败: {error}")
@@ -418,29 +442,44 @@ class StockAnalysisPipeline:
             # Step 2: AI 分析
             if skip_analysis:
                 logger.info(f"[{code}] 跳过 AI 分析（dry-run 模式）")
-                return None
+                return None, meta
             
-            result = self.analyze_stock(code, progress_callback=progress_callback)
+            result, run_data = self.analyze_stock(code, progress_callback=progress_callback)
+            
+            # 分析成功后写入历史：按报告类型分开保存（report_simple.txt / report_full.txt）
+            if result and is_history_enabled() and run_data is not None:
+                report_contents = {}
+                try:
+                    report_contents["simple"] = self.notifier.generate_single_stock_report(result)
+                    report_contents["full"] = self.notifier.generate_dashboard_report([result])
+                except Exception as e:
+                    logger.debug("生成报告用于历史保存时出错: %s", e)
+                save_analysis_history(
+                    code,
+                    today,
+                    result=result,
+                    report_contents=report_contents,
+                    data_daily=run_data.get("data_daily"),
+                    data_realtime=run_data.get("data_realtime"),
+                    data_chip=run_data.get("data_chip"),
+                    data_trend=run_data.get("data_trend"),
+                    data_intel=run_data.get("data_intel"),
+                    llm_prompt=getattr(result, "llm_prompt", None),
+                    llm_response=result.raw_response,
+                )
             
             if result:
+                meta["report_generated_at"] = datetime.now().isoformat()
                 logger.info(
                     f"[{code}] 分析完成: {result.operation_advice}, "
                     f"评分 {result.sentiment_score}"
                 )
-                
-                # 单股推送模式（#55）：每分析完一只股票立即推送
                 if single_stock_notify and self.notifier.is_available():
                     try:
-                        # 根据报告类型选择生成方法
                         if report_type == ReportType.FULL:
-                            # 完整报告：使用决策仪表盘格式
                             report_content = self.notifier.generate_dashboard_report([result])
-                            logger.info(f"[{code}] 使用完整报告格式")
                         else:
-                            # 精简报告：使用单股报告格式（默认）
                             report_content = self.notifier.generate_single_stock_report(result)
-                            logger.info(f"[{code}] 使用精简报告格式")
-                        
                         if self.notifier.send(report_content):
                             logger.info(f"[{code}] 单股推送成功")
                         else:
@@ -448,12 +487,11 @@ class StockAnalysisPipeline:
                     except Exception as e:
                         logger.error(f"[{code}] 单股推送异常: {e}")
             
-            return result
+            return result, meta
             
         except Exception as e:
-            # 捕获所有异常，确保单股失败不影响整体
             logger.exception(f"[{code}] 处理过程发生未知异常: {e}")
-            return None
+            return None, meta
     
     def run(
         self, 
@@ -532,7 +570,8 @@ class StockAnalysisPipeline:
             for idx, future in enumerate(as_completed(future_to_code)):
                 code = future_to_code[future]
                 try:
-                    result = future.result()
+                    raw = future.result()
+                    result = raw[0] if isinstance(raw, tuple) else raw
                     if result:
                         results.append(result)
 

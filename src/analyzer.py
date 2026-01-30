@@ -195,10 +195,47 @@ class AnalysisResult:
     
     # ========== 元数据 ==========
     raw_response: Optional[str] = None  # 原始响应（调试用）
+    llm_prompt: Optional[str] = None  # 大模型请求 prompt（历史存储用）
     search_performed: bool = False  # 是否执行了联网搜索
     data_sources: str = ""  # 数据来源说明
     success: bool = True
     error_message: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> 'AnalysisResult':
+        """从字典还原 AnalysisResult（用于历史缓存加载）。"""
+        return cls(
+            code=d.get('code', ''),
+            name=d.get('name', ''),
+            sentiment_score=int(d.get('sentiment_score', 50)),
+            trend_prediction=d.get('trend_prediction', '震荡'),
+            operation_advice=d.get('operation_advice', '持有'),
+            confidence_level=d.get('confidence_level', '中'),
+            dashboard=d.get('dashboard'),
+            trend_analysis=d.get('trend_analysis', ''),
+            short_term_outlook=d.get('short_term_outlook', ''),
+            medium_term_outlook=d.get('medium_term_outlook', ''),
+            technical_analysis=d.get('technical_analysis', ''),
+            ma_analysis=d.get('ma_analysis', ''),
+            volume_analysis=d.get('volume_analysis', ''),
+            pattern_analysis=d.get('pattern_analysis', ''),
+            fundamental_analysis=d.get('fundamental_analysis', ''),
+            sector_position=d.get('sector_position', ''),
+            company_highlights=d.get('company_highlights', ''),
+            news_summary=d.get('news_summary', ''),
+            market_sentiment=d.get('market_sentiment', ''),
+            hot_topics=d.get('hot_topics', ''),
+            analysis_summary=d.get('analysis_summary', ''),
+            key_points=d.get('key_points', ''),
+            risk_warning=d.get('risk_warning', ''),
+            buy_reason=d.get('buy_reason', ''),
+            raw_response=d.get('raw_response'),
+            llm_prompt=d.get('llm_prompt'),
+            search_performed=bool(d.get('search_performed', False)),
+            data_sources=d.get('data_sources', ''),
+            success=bool(d.get('success', True)),
+            error_message=d.get('error_message'),
+        )
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -230,6 +267,7 @@ class AnalysisResult:
             'search_performed': self.search_performed,
             'success': self.success,
             'error_message': self.error_message,
+            'llm_prompt': self.llm_prompt,
         }
     
     def get_core_conclusion(self) -> str:
@@ -955,6 +993,7 @@ class GeminiAnalyzer:
             # 解析响应
             result = self._parse_response(response_text, code, name)
             result.raw_response = response_text
+            result.llm_prompt = prompt
             result.search_performed = bool(news_context)
             
             logger.info(f"[LLM解析] {name}({code}) 分析完成: {result.trend_prediction}, 评分 {result.sentiment_score}")

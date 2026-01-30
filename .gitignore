@@ -49,6 +49,9 @@ env/
 data/
 logs/
 reports/
+
+# 分析历史缓存（按股票+日期存储，减少 API 调用）
+analysis_history/
 *.db
 *.sqlite
 *.sqlite3

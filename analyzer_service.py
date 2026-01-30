@@ -54,7 +54,7 @@ def analyze_stock(
     report_type = ReportType.FULL if full_report else ReportType.SIMPLE
     
     # 运行单只股票分析
-    result = pipeline.process_single_stock(
+    result, _ = pipeline.process_single_stock(
         code=stock_code,
         skip_analysis=False,
         single_stock_notify=notifier is not None,
