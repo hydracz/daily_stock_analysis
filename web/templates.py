@@ -190,6 +190,11 @@ button:active {
     color: var(--text-light);
     margin-top: 0.5rem;
 }
+.link-primary {
+    color: var(--primary);
+    text-decoration: none;
+}
+.link-primary:hover { text-decoration: underline; }
 
 .mt-2 { margin-top: 0.5rem; }
 .mt-4 { margin-top: 1rem; }
@@ -589,6 +594,292 @@ button:active {
     white-space: pre-wrap;
     word-wrap: break-word;
 }
+
+/* ========== 响应式布局与通用组件类 ========== */
+.user-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+.user-bar .user-info { color: var(--text-light); }
+.user-bar .user-info strong { color: var(--text); }
+.user-bar .user-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+.user-bar .btn-inline {
+    padding: 0.375rem 0.75rem;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    text-decoration: none;
+    display: inline-block;
+}
+.user-bar .btn-inline.secondary {
+    background: var(--text-light);
+    color: white;
+}
+/* 顶部仅显示当前用户（轻量） */
+.user-bar-top {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-light);
+    font-size: 0.875rem;
+}
+.user-bar-top strong { color: var(--text); }
+.user-bar-top .link-admin { color: var(--primary); text-decoration: none; }
+.user-bar-top .link-admin:hover { text-decoration: underline; }
+/* 页面底部账户操作：修改密码、退出 */
+.account-footer {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
+}
+.account-footer .btn-account {
+    padding: 0.5rem 1rem;
+    font-size: 0.8125rem;
+    border-radius: 0.375rem;
+    border: none;
+    cursor: pointer;
+    min-width: 6rem;
+    transition: background-color 0.2s, transform 0.1s;
+}
+.account-footer .btn-account:hover { transform: none; }
+.account-footer .btn-account.primary {
+    background: var(--primary);
+    color: white;
+}
+.account-footer .btn-account.primary:hover { background: var(--primary-hover); }
+.account-footer .btn-account.secondary {
+    background: var(--text-light);
+    color: white;
+}
+.account-footer .btn-account.secondary:hover { background: var(--text); }
+.account-footer a.btn-account {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.login-box {
+    max-width: 400px;
+    width: 100%;
+    margin: 6.25rem auto;
+    padding: 1.875rem;
+    background: var(--card);
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.login-box h2 { text-align: center; margin-bottom: 1.875rem; color: var(--text); }
+.login-box .form-row { margin-bottom: 1.25rem; }
+.login-box label { display: block; margin-bottom: 0.5rem; color: var(--text); font-weight: 500; }
+.login-box input[type="text"],
+.login-box input[type="password"] {
+    width: 100%;
+    padding: 0.625rem;
+    border: 1px solid var(--border);
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    box-sizing: border-box;
+}
+.login-box .error-msg { color: var(--error); margin-bottom: 1rem; display: none; }
+.login-box button[type="submit"] { width: 100%; padding: 0.75rem; font-size: 1rem; font-weight: 500; }
+.page-admin {
+    max-width: 1000px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 1rem;
+}
+.page-admin .admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.875rem;
+}
+.page-admin .admin-header-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.page-admin .admin-header h2 { margin: 0; color: var(--text); }
+.page-admin .admin-header .back-link {
+    color: var(--primary);
+    text-decoration: none;
+    font-size: 0.875rem;
+}
+.page-admin .admin-header .back-link:hover { text-decoration: underline; }
+.page-admin .create-user-form {
+    display: none;
+    margin-bottom: 1.25rem;
+    padding: 1.25rem;
+    background: var(--card);
+    border-radius: 0.5rem;
+}
+.page-admin .create-user-form.show { display: block; }
+.page-admin .create-user-form h3 { margin-bottom: 1rem; }
+.page-admin .create-user-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 1rem;
+    align-items: end;
+}
+.page-admin .create-user-grid .field label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; }
+.page-admin .create-user-grid input { width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 0.25rem; }
+.page-admin .create-user-grid .btn-row { display: flex; gap: 0.5rem; }
+.page-admin .create-user-grid button { width: auto; padding: 0.5rem 1.25rem; }
+.page-admin .message { display: none; padding: 0.625rem; margin-bottom: 1rem; border-radius: 0.25rem; }
+.page-admin .table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    background: var(--card);
+    border-radius: 0.5rem;
+}
+.page-admin table { width: 100%; min-width: 600px; border-collapse: collapse; }
+.page-admin th, .page-admin td { padding: 0.75rem; text-align: left; }
+.page-admin thead tr { background: var(--primary); color: white; }
+.page-admin .row-actions {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    flex-direction: row;
+    gap: 0.35rem;
+    align-items: center;
+}
+.page-admin .row-actions button {
+    padding: 0.25rem 0.5rem;
+    border: none;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    width: auto;
+    min-width: 0;
+}
+.page-admin table th:nth-child(5),
+.page-admin table td:nth-child(5) {
+    white-space: nowrap;
+    width: 1%;
+}
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    overflow-y: auto;
+}
+.modal-overlay.show { display: flex; }
+.modal-content {
+    background: var(--card);
+    padding: 1.875rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    max-width: 90vw;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+.modal-content.narrow { max-width: 400px; }
+.modal-content.medium { max-width: 600px; }
+.modal-content h3 { margin-top: 0; }
+.modal-content .form-row { margin-bottom: 1rem; }
+.modal-content .form-row label { display: block; margin-bottom: 0.25rem; }
+.modal-content .form-row input { width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 0.25rem; box-sizing: border-box; }
+.modal-content .btn-row { display: flex; gap: 0.5rem; }
+.modal-content .btn-row button { flex: 1; padding: 0.625rem; }
+
+/* 响应式断点：小屏（手机） */
+@media (max-width: 640px) {
+    body {
+        padding: 0.75rem;
+        align-items: flex-start;
+        min-height: 100vh;
+    }
+    .container {
+        max-width: 100%;
+        padding: 1rem;
+        margin: 0;
+    }
+    .input-group {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    .input-group input { min-width: 0; }
+    .input-group button { width: 100%; }
+    .report-select { min-width: 0; width: 100%; }
+    .task-list { max-height: 50vh; }
+    .task-card {
+        flex-wrap: wrap;
+        padding: 0.5rem 0.75rem;
+    }
+    .task-main { min-width: 0; }
+    .task-title .name { max-width: 120px; }
+    .task-result { width: 100%; align-items: flex-start; }
+    .task-actions { margin-top: 0.25rem; }
+    .user-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+    }
+    .user-bar .user-actions { justify-content: flex-start; }
+    .user-bar-top { margin-bottom: 0.75rem; font-size: 0.8125rem; }
+    .account-footer { margin-top: 1.25rem; padding-top: 0.75rem; gap: 0.5rem; }
+    .account-footer .btn-account { min-width: 5rem; padding: 0.5rem 0.75rem; font-size: 0.75rem; }
+    .login-box {
+        margin: 2rem auto;
+        padding: 1.25rem;
+        max-width: 100%;
+    }
+    .page-admin { padding: 0 0.5rem; }
+    .page-admin .admin-header { margin-bottom: 1.25rem; }
+    .page-admin .create-user-grid {
+        grid-template-columns: 1fr;
+    }
+    .page-admin .create-user-grid .btn-row { grid-column: 1; }
+    .modal-content {
+        margin: 0.5rem;
+        max-width: calc(100vw - 1rem);
+        padding: 1.25rem;
+    }
+    .modal-content.narrow,
+    .modal-content.medium { max-width: calc(100vw - 1rem); }
+    .toast { left: 1rem; right: 1rem; width: auto; transform: translateY(100px); }
+    .toast.show { transform: translateY(0); }
+}
+
+/* 响应式断点：中屏（平板） */
+@media (min-width: 641px) and (max-width: 1024px) {
+    body { padding: 1rem; }
+    .container { max-width: 90%; padding: 1.5rem; }
+    .page-admin { max-width: 95%; }
+    .modal-content { max-width: min(500px, 85vw); }
+}
 """
 
 
@@ -672,52 +963,41 @@ def render_config_page(
     safe_value = html.escape(stock_list)
     toast_html = render_toast(message) if message else ""
     
-    # 用户信息区域（如果已登录）
+    # 顶部：当前用户 + 用户管理链接（轻量一行）
     user_info_html = ""
+    # 底部：修改密码、退出（仅登录时显示）
+    user_footer_html = ""
     password_modal_html = ""
     if current_user != "guest":
-        admin_link = f'<a href="/admin/users" style="color: var(--primary); text-decoration: none; margin-left: 10px;">👥 用户管理</a>' if is_admin else ""
+        admin_link = f'<a href="/admin/users" class="link-admin">👥 用户管理</a>' if is_admin else ""
         user_info_html = f"""
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border);">
-        <div>
-            <span style="color: var(--text-light);">当前用户: <strong>{html.escape(current_user)}</strong></span>
-            {admin_link}
-        </div>
-        <div>
-            <button onclick="showChangePasswordModal()" 
-                    style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
-                🔑 修改密码
-            </button>
-            <a href="/api/logout" 
-               style="padding: 6px 12px; margin-left: 8px; background: var(--text-light); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; text-decoration: none; display: inline-block;">
-                🚪 退出
-            </a>
-        </div>
+    <div class="user-bar-top">
+        <span>当前用户: <strong>{html.escape(current_user)}</strong></span>
+        {admin_link}
+    </div>
+        """
+        user_footer_html = """
+    <div class="account-footer">
+        <button type="button" onclick="showChangePasswordModal()" class="btn-account primary">🔑 修改密码</button>
+        <a href="/api/logout" class="btn-account secondary">🚪 退出</a>
     </div>
         """
         
         # 修改密码模态框
         password_modal_html = """
     <!-- 修改密码模态框 -->
-    <div id="changePasswordModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-        <div style="background: white; padding: 30px; border-radius: 8px; max-width: 400px; margin: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            <h3 style="margin-top: 0;">修改密码</h3>
+    <div id="changePasswordModal" class="modal-overlay">
+        <div class="modal-content narrow">
+            <h3>修改密码</h3>
             <form id="changePasswordForm" onsubmit="changePassword(event)">
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">新密码</label>
-                    <input type="password" id="changePasswordInput" name="password" required 
-                           style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                <div class="form-row">
+                    <label for="changePasswordInput">新密码</label>
+                    <input type="password" id="changePasswordInput" name="password" required>
                 </div>
-                <div id="changePasswordMsg" style="display: none; margin-bottom: 15px; padding: 10px; border-radius: 4px;"></div>
-                <div style="display: flex; gap: 10px;">
-                    <button type="submit" 
-                            style="flex: 1; padding: 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        确定
-                    </button>
-                    <button type="button" onclick="closeChangePasswordModal()" 
-                            style="flex: 1; padding: 10px; background: var(--text-light); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        取消
-                    </button>
+                <div id="changePasswordMsg" class="message" style="display: none; margin-bottom: 1rem; padding: 0.625rem; border-radius: 0.25rem;"></div>
+                <div class="btn-row">
+                    <button type="submit">确定</button>
+                    <button type="button" onclick="closeChangePasswordModal()" class="btn-secondary">取消</button>
                 </div>
             </form>
         </div>
@@ -725,13 +1005,15 @@ def render_config_page(
     
     <script>
         function showChangePasswordModal() {
-            document.getElementById('changePasswordModal').style.display = 'flex';
+            document.getElementById('changePasswordModal').classList.add('show');
             document.getElementById('changePasswordInput').value = '';
-            document.getElementById('changePasswordMsg').style.display = 'none';
+            var msg = document.getElementById('changePasswordMsg');
+            msg.style.display = 'none';
+            msg.textContent = '';
         }
         
         function closeChangePasswordModal() {
-            document.getElementById('changePasswordModal').style.display = 'none';
+            document.getElementById('changePasswordModal').classList.remove('show');
             document.getElementById('changePasswordForm').reset();
         }
         
@@ -772,11 +1054,8 @@ def render_config_page(
             }
         }
         
-        // 点击模态框外部关闭
         document.addEventListener('click', function(e) {
-            if (e.target.id === 'changePasswordModal') {
-                closeChangePasswordModal();
-            }
+            if (e.target.id === 'changePasswordModal') closeChangePasswordModal();
         });
     </script>
         """
@@ -1248,7 +1527,7 @@ def render_config_page(
       </div>
       <button type="submit">💾 保存</button>
     </form>
-    
+    {user_footer_html}
     <div class="footer">
       <p>API: <code>/health</code> · <code>/analysis?code=xxx</code> · <code>/tasks</code></p>
     </div>
@@ -1286,7 +1565,7 @@ def render_error_page(
     <h2>😵 {status_code}</h2>
     <p>{html.escape(message)}</p>
     {details_html}
-    <a href="/" style="color: var(--primary); text-decoration: none;">← 返回首页</a>
+    <a href="/" class="link-primary">← 返回首页</a>
   </div>
 """
     
@@ -1300,26 +1579,19 @@ def render_error_page(
 def render_login_page() -> bytes:
     """渲染登录页面"""
     content = """
-    <div style="max-width: 400px; margin: 100px auto; padding: 30px; background: var(--card); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-        <h2 style="text-align: center; margin-bottom: 30px; color: var(--text);">用户登录</h2>
+    <div class="login-box">
+        <h2>用户登录</h2>
         <form id="loginForm" method="POST" action="/api/login">
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; margin-bottom: 8px; color: var(--text); font-weight: 500;">用户名</label>
-                <input type="text" name="username" id="username" required 
-                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;"
-                       autocomplete="username">
+            <div class="form-row">
+                <label for="username">用户名</label>
+                <input type="text" name="username" id="username" required autocomplete="username">
             </div>
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; margin-bottom: 8px; color: var(--text); font-weight: 500;">密码</label>
-                <input type="password" name="password" id="password" required 
-                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;"
-                       autocomplete="current-password">
+            <div class="form-row">
+                <label for="password">密码</label>
+                <input type="password" name="password" id="password" required autocomplete="current-password">
             </div>
-            <div id="errorMsg" style="color: #dc2626; margin-bottom: 15px; display: none;"></div>
-            <button type="submit" 
-                    style="width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: 500; cursor: pointer;">
-                登录
-            </button>
+            <div id="errorMsg" class="error-msg"></div>
+            <button type="submit">登录</button>
         </form>
     </div>
     <script>
@@ -1394,9 +1666,10 @@ def render_login_page() -> bytes:
 
 
 def render_user_manage_page(users: list) -> bytes:
-    """渲染用户管理页面"""
+    """渲染用户管理页面（按 ID 升序排列）"""
     users_html = ""
-    for user in users:
+    sorted_users = sorted(users, key=lambda u: u.get("id") or 0)
+    for user in sorted_users:
         status = "启用" if user.get('enabled', True) else "禁用"
         admin_badge = '<span style="background: #dc2626; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-left: 8px;">管理员</span>' if user.get('is_admin') else ""
         users_html += f"""
@@ -1406,139 +1679,113 @@ def render_user_manage_page(users: list) -> bytes:
             <td>{status}</td>
             <td>{user.get('created_at', '')[:10] if user.get('created_at') else ''}</td>
             <td>
-                <div style="display: flex; gap: 5px;">
-                    <button onclick="viewUserDetail({user.get('id')})" 
-                            style="padding: 4px 12px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
-                        详情
-                    </button>
-                    <button onclick="editUserPassword({user.get('id')}, '{html.escape(user.get('username', ''))}')" 
-                            style="padding: 4px 12px; background: #059669; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
-                        密码
-                    </button>
-                    <button onclick="editUserRole({user.get('id')}, {str(user.get('is_admin', False)).lower()})" 
-                            style="padding: 4px 12px; background: #d97706; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
-                        角色
-                    </button>
-                    <button onclick="toggleUserStatus({user.get('id')}, {str(user.get('enabled', True)).lower()})" 
-                            style="padding: 4px 12px; background: #7c3aed; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
-                        {'禁用' if user.get('enabled', True) else '启用'}
-                    </button>
-                    <button onclick="deleteUser({user.get('id')})" 
-                            style="padding: 4px 12px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
-                        删除
-                    </button>
+                <div class="row-actions">
+                    <button type="button" onclick="viewUserDetail({user.get('id')})" style="background: var(--primary); color: white;">详情</button>
+                    <button type="button" onclick="editUserPassword({user.get('id')}, '{html.escape(user.get('username', ''))}')" style="background: #059669; color: white;">密码</button>
+                    <button type="button" onclick="editUserRole({user.get('id')}, {str(user.get('is_admin', False)).lower()})" style="background: #d97706; color: white;">角色</button>
+                    <button type="button" onclick="toggleUserStatus({user.get('id')}, {str(user.get('enabled', True)).lower()})" style="background: #7c3aed; color: white;">{'禁用' if user.get('enabled', True) else '启用'}</button>
+                    <button type="button" onclick="deleteUser({user.get('id')})" style="background: #dc2626; color: white;">删除</button>
                 </div>
             </td>
         </tr>
         """
     
     content = f"""
-    <div style="max-width: 1000px; margin: 0 auto;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
-            <h2 style="color: var(--text);">用户管理</h2>
-            <button onclick="showCreateUserForm()" 
-                    style="padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                添加用户
-            </button>
+    <div class="page-admin">
+        <div class="admin-header">
+            <div class="admin-header-left">
+                <a href="/" class="back-link">← 返回主页</a>
+                <h2>用户管理</h2>
+            </div>
+            <button type="button" onclick="showCreateUserForm()">添加用户</button>
         </div>
         
-        <div id="createUserForm" style="display: none; margin-bottom: 20px; padding: 20px; background: var(--card); border-radius: 8px;">
-            <h3 style="margin-bottom: 15px;">创建新用户</h3>
+        <div id="createUserForm" class="create-user-form">
+            <h3>创建新用户</h3>
             <form id="createForm" onsubmit="createUser(event)">
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 15px; align-items: end;">
-                    <div>
-                        <label style="display: block; margin-bottom: 5px; font-size: 14px;">用户名</label>
-                        <input type="text" name="username" required 
-                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                <div class="create-user-grid">
+                    <div class="field">
+                        <label for="createUsername">用户名</label>
+                        <input type="text" name="username" id="createUsername" required>
                     </div>
-                    <div>
-                        <label style="display: block; margin-bottom: 5px; font-size: 14px;">密码</label>
-                        <input type="password" name="password" required 
-                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <div class="field">
+                        <label for="createPassword">密码</label>
+                        <input type="password" name="password" id="createPassword" required>
                     </div>
-                    <div>
-                        <label style="display: block; margin-bottom: 5px; font-size: 14px;">
-                            <input type="checkbox" name="is_admin" style="margin-right: 5px;">管理员
-                        </label>
+                    <div class="field">
+                        <label><input type="checkbox" name="is_admin"> 管理员</label>
                     </div>
-                    <div>
-                        <button type="submit" 
-                                style="padding: 8px 20px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                            创建
-                        </button>
-                        <button type="button" onclick="hideCreateUserForm()" 
-                                style="padding: 8px 20px; margin-left: 10px; background: #64748b; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                            取消
-                        </button>
+                    <div class="btn-row">
+                        <button type="submit">创建</button>
+                        <button type="button" onclick="hideCreateUserForm()" class="btn-secondary">取消</button>
                     </div>
                 </div>
             </form>
         </div>
         
-        <div id="message" style="display: none; padding: 10px; margin-bottom: 15px; border-radius: 4px;"></div>
+        <div id="message" class="message"></div>
         
-        <table style="width: 100%; border-collapse: collapse; background: var(--card); border-radius: 8px; overflow: hidden;">
-            <thead>
-                <tr style="background: var(--primary); color: white;">
-                    <th style="padding: 12px; text-align: left;">ID</th>
-                    <th style="padding: 12px; text-align: left;">用户名</th>
-                    <th style="padding: 12px; text-align: left;">状态</th>
-                    <th style="padding: 12px; text-align: left;">创建时间</th>
-                    <th style="padding: 12px; text-align: left;">操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {users_html if users_html else '<tr><td colspan="5" style="text-align: center; padding: 20px;">暂无用户</td></tr>'}
-            </tbody>
-        </table>
-    </div>
-    
-    <!-- 用户详情模态框 -->
-    <div id="userDetailModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-        <div style="background: white; padding: 30px; border-radius: 8px; max-width: 600px; max-height: 80vh; overflow-y: auto; margin: 20px;">
-            <h3 style="margin-top: 0;">用户详情</h3>
-            <div id="userDetailContent"></div>
-            <button onclick="closeUserDetail()" style="margin-top: 20px; padding: 10px 20px; background: var(--text-light); color: white; border: none; border-radius: 4px; cursor: pointer;">关闭</button>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>用户名</th>
+                        <th>状态</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {users_html if users_html else '<tr><td colspan="5" style="text-align: center; padding: 1.25rem;">暂无用户</td></tr>'}
+                </tbody>
+            </table>
         </div>
     </div>
     
-    <!-- 修改密码模态框 -->
-    <div id="passwordModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-        <div style="background: white; padding: 30px; border-radius: 8px; max-width: 400px; margin: 20px;">
-            <h3 style="margin-top: 0;">修改密码</h3>
+    <div id="userDetailModal" class="modal-overlay">
+        <div class="modal-content medium">
+            <h3>用户详情</h3>
+            <div id="userDetailContent"></div>
+            <button type="button" onclick="closeUserDetail()" class="btn-secondary" style="margin-top: 1rem;">关闭</button>
+        </div>
+    </div>
+    
+    <div id="passwordModal" class="modal-overlay">
+        <div class="modal-content narrow">
+            <h3>修改密码</h3>
             <form id="passwordForm" onsubmit="updatePassword(event)">
                 <input type="hidden" id="passwordUserId" name="user_id">
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px;">用户名</label>
-                    <input type="text" id="passwordUsername" readonly style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; background: #f5f5f5;">
+                <div class="form-row">
+                    <label>用户名</label>
+                    <input type="text" id="passwordUsername" readonly style="background: var(--bg);">
                 </div>
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px;">新密码</label>
-                    <input type="password" id="newPassword" name="password" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                <div class="form-row">
+                    <label for="newPassword">新密码</label>
+                    <input type="password" id="newPassword" name="password" required>
                 </div>
-                <div style="display: flex; gap: 10px;">
-                    <button type="submit" style="flex: 1; padding: 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">确定</button>
-                    <button type="button" onclick="closePasswordModal()" style="flex: 1; padding: 10px; background: var(--text-light); color: white; border: none; border-radius: 4px; cursor: pointer;">取消</button>
+                <div class="btn-row">
+                    <button type="submit">确定</button>
+                    <button type="button" onclick="closePasswordModal()" class="btn-secondary">取消</button>
                 </div>
             </form>
         </div>
     </div>
     
-    <!-- 修改角色模态框 -->
-    <div id="roleModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-        <div style="background: white; padding: 30px; border-radius: 8px; max-width: 400px; margin: 20px;">
-            <h3 style="margin-top: 0;">修改角色</h3>
+    <div id="roleModal" class="modal-overlay">
+        <div class="modal-content narrow">
+            <h3>修改角色</h3>
             <form id="roleForm" onsubmit="updateRole(event)">
                 <input type="hidden" id="roleUserId" name="user_id">
-                <div style="margin-bottom: 15px;">
+                <div class="form-row">
                     <label style="display: flex; align-items: center; cursor: pointer;">
-                        <input type="checkbox" id="roleIsAdmin" name="is_admin" style="margin-right: 8px; width: 18px; height: 18px;">
+                        <input type="checkbox" id="roleIsAdmin" name="is_admin" style="margin-right: 0.5rem;">
                         <span>设为管理员</span>
                     </label>
                 </div>
-                <div style="display: flex; gap: 10px;">
-                    <button type="submit" style="flex: 1; padding: 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">确定</button>
-                    <button type="button" onclick="closeRoleModal()" style="flex: 1; padding: 10px; background: var(--text-light); color: white; border: none; border-radius: 4px; cursor: pointer;">取消</button>
+                <div class="btn-row">
+                    <button type="submit">确定</button>
+                    <button type="button" onclick="closeRoleModal()" class="btn-secondary">取消</button>
                 </div>
             </form>
         </div>
@@ -1546,11 +1793,11 @@ def render_user_manage_page(users: list) -> bytes:
     
     <script>
         function showCreateUserForm() {{
-            document.getElementById('createUserForm').style.display = 'block';
+            document.getElementById('createUserForm').classList.add('show');
         }}
         
         function hideCreateUserForm() {{
-            document.getElementById('createUserForm').style.display = 'none';
+            document.getElementById('createUserForm').classList.remove('show');
             document.getElementById('createForm').reset();
         }}
         
@@ -1621,7 +1868,7 @@ def render_user_manage_page(users: list) -> bytes:
                         </div>
                     `;
                     document.getElementById('userDetailContent').innerHTML = content;
-                    document.getElementById('userDetailModal').style.display = 'flex';
+                    document.getElementById('userDetailModal').classList.add('show');
                 }} else {{
                     showMessage(result.error || '获取用户详情失败', 'error');
                 }}
@@ -1631,18 +1878,18 @@ def render_user_manage_page(users: list) -> bytes:
         }}
         
         function closeUserDetail() {{
-            document.getElementById('userDetailModal').style.display = 'none';
+            document.getElementById('userDetailModal').classList.remove('show');
         }}
         
         function editUserPassword(userId, username) {{
             document.getElementById('passwordUserId').value = userId;
             document.getElementById('passwordUsername').value = username;
             document.getElementById('newPassword').value = '';
-            document.getElementById('passwordModal').style.display = 'flex';
+            document.getElementById('passwordModal').classList.add('show');
         }}
         
         function closePasswordModal() {{
-            document.getElementById('passwordModal').style.display = 'none';
+            document.getElementById('passwordModal').classList.remove('show');
             document.getElementById('passwordForm').reset();
         }}
         
@@ -1673,11 +1920,11 @@ def render_user_manage_page(users: list) -> bytes:
         function editUserRole(userId, isAdmin) {{
             document.getElementById('roleUserId').value = userId;
             document.getElementById('roleIsAdmin').checked = isAdmin;
-            document.getElementById('roleModal').style.display = 'flex';
+            document.getElementById('roleModal').classList.add('show');
         }}
         
         function closeRoleModal() {{
-            document.getElementById('roleModal').style.display = 'none';
+            document.getElementById('roleModal').classList.remove('show');
         }}
         
         async function updateRole(e) {{
