@@ -981,7 +981,7 @@ class GeminiAnalyzer:
             start_time = time.time()
             response_text = self._call_api_with_retry(prompt, generation_config)
             elapsed = time.time() - start_time
-            
+
             # 记录响应信息
             logger.info(f"[LLM返回] {api_name} 响应成功, 耗时 {elapsed:.2f}s, 响应长度 {len(response_text)} 字符")
             

@@ -1110,10 +1110,10 @@ def render_config_page(
     const POLL_INTERVAL_MS = 3000;
     const MAX_TASKS_DISPLAY = 10;
     
-    // 允许输入数字和字母（支持港股 hkxxxxx 格式）
+    // 允许输入数字和字母和点（支持港股 HKxxxxx 格式 美股AAPL/BRK.B）
     codeInput.addEventListener('input', function(e) {
-        // 转小写，只保留字母和数字
-        this.value = this.value.toLowerCase().replace(/[^a-z0-9]/g, '');
+        // 转大写，只保留字母和数字和点
+        this.value = this.value.toUpperCase().replace(/[^A-Z0-9.]/g, '');
         if (this.value.length > 8) {
             this.value = this.value.slice(0, 8);
         }
@@ -1130,12 +1130,14 @@ def render_config_page(
         }
     });
     
-    // 更新按钮状态 - 支持 A股(6位数字) 或 港股(hk+5位数字)
+    // 更新按钮状态 - 支持 A股(6位数字) 或 港股(HK+5位数字)
     function updateButtonState() {
-        const code = codeInput.value.trim().toLowerCase();
+        const code = codeInput.value.trim();
         const isAStock = /^\\d{6}$/.test(code);           // A股: 600519
-        const isHKStock = /^hk\\d{5}$/.test(code);        // 港股: hk00700
-        submitBtn.disabled = !(isAStock || isHKStock);
+        const isHKStock = /^HK\\d{5}$/.test(code);        // 港股: HK00700
+        const isUSStock =  /^[A-Z]{1,5}(\.[A-Z]{1,2})?$/.test(code); // 美股: AAPL
+
+        submitBtn.disabled = !(isAStock || isHKStock || isUSStock);
     }
     
     // 格式化时间
@@ -1454,17 +1456,18 @@ def render_config_page(
     
     // 提交分析
     window.submitAnalysis = function() {
-        const code = codeInput.value.trim().toLowerCase();
+        const code = codeInput.value.trim();
         const isAStock = /^\d{6}$/.test(code);
-        const isHKStock = /^hk\d{5}$/.test(code);
-        
-        if (!(isAStock || isHKStock)) {
+        const isHKStock = /^HK\d{5}$/.test(code);
+        const isUSStock = /^[A-Z]{1,5}(\.[A-Z]{1,2})?$/.test(code);
+
+        if (!(isAStock || isHKStock || isUSStock)) {
             return;
         }
         
         submitBtn.disabled = true;
         submitBtn.textContent = '提交中...';
-        
+
         const reportType = reportTypeSelect.value;
         const forceRefresh = forceRefreshCheckbox && forceRefreshCheckbox.checked;
         const url = '/analysis?code=' + encodeURIComponent(code) + '&report_type=' + encodeURIComponent(reportType) +
@@ -1522,7 +1525,7 @@ def render_config_page(
     
     content = f"""
   <div class="container">
-    <h2>📈 A/H股分析</h2>
+    <h2>📈 A股/港股/美股分析</h2>
     {user_info_html}
     
     <!-- 快速分析区域 -->
@@ -1532,7 +1535,7 @@ def render_config_page(
           <input 
               type="text" 
               id="analysis_code" 
-              placeholder="A股 600519 / 港股 hk00700 / 美股 AAPL"
+              placeholder="A股 600519 / 港股 HK00700 / 美股 AAPL"
               maxlength="8"
               autocomplete="off"
           />
