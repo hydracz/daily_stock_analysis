@@ -109,6 +109,10 @@ def main() -> int:
         WEBUI_HOST: 监听地址 (默认 0.0.0.0)
         WEBUI_PORT: 监听端口 (默认 8000)
     """
+    # 尽早加载配置，应用 .env 中的 HTTP_PROXY/HTTPS_PROXY（若有）
+    from src.config import get_config
+    get_config()
+
     host = os.getenv("WEBUI_HOST", "0.0.0.0")
     port = int(os.getenv("WEBUI_PORT", "8000"))
     

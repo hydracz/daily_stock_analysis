@@ -29,32 +29,18 @@
 
 ### 🔴 严重问题
 
-#### 1. test_env.py 中硬编码代理配置
+#### 1. ~~test_env.py / main.py 中硬编码代理配置~~ ✅ 已修复
 
-**位置：** `test_env.py` 第 23-24 行
+**原位置：** `test_env.py`、`main.py` 中曾硬编码 `http://127.0.0.1:10809`
 
-```python
-os.environ["http_proxy"] = "http://127.0.0.1:10809"
-os.environ["https_proxy"] = "http://127.0.0.1:10809"
-```
+**修复状态：** 已统一改为从 `.env` 的 `HTTP_PROXY`/`HTTPS_PROXY` 读取，无配置则直连
 
-**风险：**
+**原风险：**
 - 暴露本地代理配置
 - 如果提交到 Git，会泄露本地网络配置
 - 可能被恶意利用
 
-**修复建议：**
-```python
-# 应该改为从环境变量读取，或使用 .env 文件
-http_proxy = os.getenv('HTTP_PROXY')
-https_proxy = os.getenv('HTTPS_PROXY')
-if http_proxy:
-    os.environ["http_proxy"] = http_proxy
-if https_proxy:
-    os.environ["https_proxy"] = https_proxy
-```
-
-**修复优先级：** 🔴 高
+**已采纳的修复：** 从 `.env` 或环境变量读取 `HTTP_PROXY`/`HTTPS_PROXY`，无配置则直连。
 
 ### 🟡 中等问题
 
@@ -231,7 +217,7 @@ Webhook URL 通常包含 Token，虽然不会直接暴露，但需要注意：
 - [x] 没有硬编码的 Token
 - [x] `.env` 文件已添加到 `.gitignore`
 - [x] `.env.example` 只包含占位符
-- [x] ✅ `test_env.py` 中的硬编码代理已修复
+- [x] ✅ `main.py`、`test_env.py` 中的硬编码代理已移除，统一从 `.env` 读取
 
 ### Web 服务检查
 - [ ] ⚠️ WebUI 缺少认证机制（如果部署在公网，需要修复）
@@ -259,22 +245,9 @@ Webhook URL 通常包含 Token，虽然不会直接暴露，但需要注意：
 
 ### 1. 立即修复的问题
 
-#### 修复 test_env.py 中的硬编码代理
+#### ~~修复硬编码代理~~ ✅ 已完成
 
-```python
-# 修改前（不安全）
-os.environ["http_proxy"] = "http://127.0.0.1:10809"
-os.environ["https_proxy"] = "http://127.0.0.1:10809"
-
-# 修改后（安全）
-# 从环境变量或 .env 文件读取，不要硬编码
-http_proxy = os.getenv('HTTP_PROXY')
-https_proxy = os.getenv('HTTPS_PROXY')
-if http_proxy:
-    os.environ["http_proxy"] = http_proxy
-if https_proxy:
-    os.environ["https_proxy"] = https_proxy
-```
+所有入口（`main.py`、`test_env.py`、`webui.py`）均通过 `src.config` 加载 `.env`，代理由 `HTTP_PROXY`/`HTTPS_PROXY` 配置，无配置则直连。配置后会自动设置 `NO_PROXY` 排除国内数据源。
 
 ### 2. 增强日志安全
 
@@ -395,7 +368,7 @@ grep -r "ghp_[a-zA-Z0-9]\{32,\}" --exclude-dir=.git
 
 ### 建议：
 
-1. ✅ **已完成：** 修复 `test_env.py` 中的硬编码代理
+1. ✅ **已完成：** 修复 `main.py`、`test_env.py` 中的硬编码代理，统一从 `.env` 读取
 2. **如果部署在公网：** 必须添加 WebUI 认证机制
 3. **增强 `.env` 文件写入验证：** 添加更严格的输入验证
 4. **定期执行安全审计：** 检查依赖包漏洞

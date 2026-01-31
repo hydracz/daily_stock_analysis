@@ -23,12 +23,9 @@ A股自选股智能分析系统 - 主调度程序
 """
 import os
 
-# 代理配置 - 仅在本地环境使用，GitHub Actions 不需要
-if os.getenv("GITHUB_ACTIONS") != "true":
-    # 本地开发环境，如需代理请取消注释或修改端口
-    os.environ["http_proxy"] = "http://127.0.0.1:10809"
-    os.environ["https_proxy"] = "http://127.0.0.1:10809"
-    pass
+# 代理配置：从 .env 环境变量读取，无配置则直连
+# get_config() 加载时会自动应用 HTTP_PROXY/HTTPS_PROXY 并设置 NO_PROXY 排除国内数据源
+# 此处不硬编码，由 src.config 统一处理
 
 import argparse
 import logging
@@ -357,8 +354,9 @@ def main() -> int:
     """
     # 解析命令行参数
     args = parse_arguments()
-    
-    # 加载配置（在设置日志前加载，以获取日志目录）
+
+    # 尽早加载配置：加载 .env 并应用代理设置（HTTP_PROXY/HTTPS_PROXY）
+    # 无代理配置时直连；有代理时会自动设置 NO_PROXY 排除国内数据源
     config = get_config()
     
     # 配置日志（输出到控制台和文件）

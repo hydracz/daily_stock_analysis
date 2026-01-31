@@ -261,8 +261,8 @@ class Config:
             os.environ['HTTP_PROXY'] = http_proxy
             os.environ['http_proxy'] = http_proxy
 
-            # HTTPS_PROXY 同理
-            https_proxy = os.getenv('HTTPS_PROXY') or os.getenv('https_proxy')
+            # HTTPS_PROXY：显式配置优先，否则复用 HTTP_PROXY（常见做法）
+            https_proxy = os.getenv('HTTPS_PROXY') or os.getenv('https_proxy') or http_proxy
             if https_proxy:
                 os.environ['HTTPS_PROXY'] = https_proxy
                 os.environ['https_proxy'] = https_proxy
