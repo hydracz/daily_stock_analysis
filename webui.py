@@ -65,6 +65,36 @@ __all__ = [
 ]
 
 
+def _start_custom_task_scheduler() -> None:
+    """启动用户自定义任务调度器（每分钟检查）"""
+    import threading
+    import time
+
+    def _scheduler_loop():
+        from src.custom_task_service import get_custom_task_service
+        logger = logging.getLogger(__name__)
+        while True:
+            try:
+                svc = get_custom_task_service()
+                due_tasks = svc.get_tasks_due_now()
+                for user_id, task in due_tasks:
+                    try:
+                        result = svc.run_user_custom_task(user_id)
+                        if result.get("success"):
+                            logger.info(f"[CustomTask] 用户 {user_id} 自定义任务已执行: {result.get('message')}")
+                        else:
+                            logger.warning(f"[CustomTask] 用户 {user_id} 任务执行失败: {result.get('error')}")
+                    except Exception as e:
+                        logger.exception(f"[CustomTask] 用户 {user_id} 任务异常: {e}")
+            except Exception as e:
+                logger.exception(f"[CustomTask] 调度器异常: {e}")
+            time.sleep(60)  # 每分钟检查一次
+
+    t = threading.Thread(target=_scheduler_loop, daemon=True, name="CustomTaskScheduler")
+    t.start()
+    logger.info("[WebUI] 用户自定义任务调度器已启动（每分钟检查）")
+
+
 def _start_bot_stream_clients() -> None:
     """启动 Bot Stream 模式客户端（如果已配置）"""
     from src.config import get_config
@@ -134,6 +164,9 @@ def main() -> int:
     
     # 启动 Bot Stream 客户端（如果配置了）
     _start_bot_stream_clients()
+
+    # 启动用户自定义任务调度器
+    _start_custom_task_scheduler()
     
     try:
         run_server(host=host, port=port)

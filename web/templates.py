@@ -791,30 +791,68 @@ button:active {
     background: var(--card);
     border-radius: 0.5rem;
 }
-.page-admin table { width: 100%; min-width: 600px; border-collapse: collapse; }
+.page-admin table { width: 100%; min-width: 900px; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
 .page-admin th, .page-admin td { padding: 0.75rem; text-align: left; }
 .page-admin thead tr { background: var(--primary); color: white; }
+.page-admin .table-wrap { min-width: 0; width: 100%; }
+/* 用户管理表格列宽：固定布局避免操作列覆盖其他列 */
+.page-admin table th:nth-child(1),
+.page-admin table td:nth-child(1) { width: 50px; }
+.page-admin table th:nth-child(2),
+.page-admin table td:nth-child(2) { width: auto; min-width: 120px; }
+.page-admin table th:nth-child(3),
+.page-admin table td:nth-child(3) { width: 80px; }
+.page-admin table th:nth-child(4),
+.page-admin table td:nth-child(4) { width: 125px; }
+.page-admin table th:nth-child(5),
+.page-admin table td:nth-child(5) {
+    width: 360px;
+    min-width: 360px;
+    text-align: right;
+    overflow: hidden;
+}
+/* 用户权限徽章：换行展示；用户名列防止长内容溢出挤压 */
+.page-admin .user-cell {
+    vertical-align: top;
+    overflow: hidden;
+    word-break: break-word;
+}
+.page-admin .user-name { display: block; font-weight: 500; margin-bottom: 0.25rem; }
+.page-admin .user-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.5rem;
+    margin-top: 0.25rem;
+}
+.page-admin .user-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1.3;
+}
+.page-admin .user-badge.admin { background: #dc2626; color: white; }
+.page-admin .user-badge.custom { background: #059669; color: white; }
+/* 操作按钮：横向排列、右对齐、限制在操作列内不溢出覆盖用户信息 */
 .page-admin .row-actions {
     display: inline-flex;
     flex-wrap: nowrap;
     flex-direction: row;
     gap: 0.35rem;
     align-items: center;
+    justify-content: flex-end;
+    max-width: 100%;
+    margin-left: auto;
 }
 .page-admin .row-actions button {
+    width: auto;
     padding: 0.25rem 0.5rem;
     border: none;
     border-radius: 0.25rem;
     cursor: pointer;
     font-size: 0.75rem;
     white-space: nowrap;
-    width: auto;
-    min-width: 0;
-}
-.page-admin table th:nth-child(5),
-.page-admin table td:nth-child(5) {
-    white-space: nowrap;
-    width: 1%;
+    flex-shrink: 0;
 }
 .modal-overlay {
     display: none;
@@ -838,10 +876,33 @@ button:active {
     max-height: 85vh;
     overflow-y: auto;
 }
-.modal-content.narrow { max-width: 400px; }
+.modal-content.narrow { max-width: 400px; min-width: 280px; }
 .modal-content.medium { max-width: 600px; }
 .modal-content h3 { margin-top: 0; }
 .modal-content .form-row { margin-bottom: 1rem; }
+/* 角色权限区域：避免换行、自适应 */
+.modal-content .role-permissions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 1.5rem;
+    margin-bottom: 1.25rem;
+}
+.modal-content .role-perm-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.modal-content .role-perm-item input[type="checkbox"] {
+    flex-shrink: 0;
+    margin: 0;
+}
+.modal-content .role-perm-item span {
+    white-space: nowrap;
+}
+.modal-role { width: 100%; }
 .modal-content .form-row label { display: block; margin-bottom: 0.25rem; }
 .modal-content .form-row input { width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 0.25rem; box-sizing: border-box; }
 .modal-content .btn-row { display: flex; gap: 0.5rem; }
@@ -902,6 +963,7 @@ button:active {
     }
     .modal-content.narrow,
     .modal-content.medium { max-width: calc(100vw - 1rem); }
+    .page-admin table { min-width: 700px; }
     .toast { left: 1rem; right: 1rem; width: auto; transform: translateY(100px); }
     .toast.show { transform: translateY(0); }
 }
@@ -979,34 +1041,38 @@ def render_toast(message: str, toast_type: str = "success") -> str:
 
 
 def render_config_page(
-    stock_list: str,
-    env_filename: str,
     message: Optional[str] = None,
     current_user: str = "guest",
-    is_admin: bool = False
+    is_admin: bool = False,
+    can_custom_task: bool = False
 ) -> bytes:
     """
     渲染配置页面
     
     Args:
-        stock_list: 当前自选股列表
-        env_filename: 环境文件名
         message: 可选的提示消息
+        current_user: 当前用户名
+        is_admin: 是否管理员
+        can_custom_task: 是否有自定义任务权限
     """
-    safe_value = html.escape(stock_list)
     toast_html = render_toast(message) if message else ""
     
-    # 顶部：当前用户 + 用户管理链接（轻量一行）
+    # 顶部：当前用户 + 用户管理/自定义任务链接（轻量一行）
     user_info_html = ""
     # 底部：修改密码、退出（仅登录时显示）
     user_footer_html = ""
     password_modal_html = ""
     if current_user != "guest":
-        admin_link = f'<a href="/admin/users" class="link-admin">👥 用户管理</a>' if is_admin else ""
+        links = []
+        if is_admin:
+            links.append('<a href="/admin/users" class="link-admin">👥 用户管理</a>')
+        if can_custom_task:
+            links.append('<a href="/custom-tasks" class="link-admin">⏰ 自定义任务</a>')
+        links_html = " · ".join(links) if links else ""
         user_info_html = f"""
     <div class="user-bar-top">
         <span>当前用户: <strong>{html.escape(current_user)}</strong></span>
-        {admin_link}
+        {(' · ' + links_html) if links_html else ""}
     </div>
         """
         user_footer_html = """
@@ -1555,14 +1621,17 @@ def render_config_page(
     <!-- 快速分析区域 -->
     <div class="analysis-section" style="margin-top: 0; padding-top: 0; border-top: none;">
       <div class="form-group" style="margin-bottom: 0.75rem;">
-        <div class="input-group">
-          <input 
-              type="text" 
-              id="analysis_code" 
-              placeholder="A股 600519 / 港股 HK00700 / 美股 AAPL"
-              maxlength="8"
-              autocomplete="off"
-          />
+                <div style="color: #888; font-size: 14px; margin-bottom: 4px; margin-left: 2px;">
+                    示例：A股 600519 / 港股 HK00700 / 美股 AAPL
+                </div>
+                <div class="input-group">
+                    <input 
+                            type="text" 
+                            id="analysis_code" 
+                            placeholder="请输入股票代码"
+                            maxlength="8"
+                            autocomplete="off"
+                    />
           <select id="report_type" class="report-select" title="选择报告类型">
             <option value="full" selected>📊 完整报告</option>
             <option value="simple">📝 精简报告</option>
@@ -1581,22 +1650,6 @@ def render_config_page(
       <div id="task_list" class="task-list"></div>
     </div>
     
-    <hr class="section-divider">
-    
-    <!-- 自选股配置区域 -->
-    <form method="post" action="/update">
-      <div class="form-group">
-        <label for="stock_list">📋 自选股列表 <span class="code-badge">{html.escape(env_filename)}</span></label>
-        <p>仅用于本地环境 (127.0.0.1) • 安全修改 .env 配置</p>
-        <textarea 
-            id="stock_list" 
-            name="stock_list" 
-            rows="4" 
-            placeholder="例如: 600519, 000001 (逗号或换行分隔)"
-        >{safe_value}</textarea>
-      </div>
-      <button type="submit">💾 保存</button>
-    </form>
     {user_footer_html}
     <div class="footer">
       <p>API: <code>/health</code> · <code>/analysis?code=xxx</code> · <code>/tasks</code></p>
@@ -1741,18 +1794,20 @@ def render_user_manage_page(users: list) -> bytes:
     sorted_users = sorted(users, key=lambda u: u.get("id") or 0)
     for user in sorted_users:
         status = "启用" if user.get('enabled', True) else "禁用"
-        admin_badge = '<span style="background: #dc2626; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-left: 8px;">管理员</span>' if user.get('is_admin') else ""
+        admin_badge = '<span class="user-badge admin">管理员</span>' if user.get('is_admin') else ""
+        custom_task_badge = '<span class="user-badge custom">自定义任务</span>' if user.get('can_custom_task') else ""
+        badges = (admin_badge + custom_task_badge) or ""
         users_html += f"""
         <tr>
             <td>{user.get('id')}</td>
-            <td>{html.escape(user.get('username', ''))}{admin_badge}</td>
+            <td class="user-cell"><span class="user-name">{html.escape(user.get('username', ''))}</span><div class="user-badges">{badges}</div></td>
             <td>{status}</td>
             <td>{user.get('created_at', '')[:10] if user.get('created_at') else ''}</td>
             <td>
                 <div class="row-actions">
                     <button type="button" onclick="viewUserDetail({user.get('id')})" style="background: var(--primary); color: white;">详情</button>
                     <button type="button" onclick="editUserPassword({user.get('id')}, '{html.escape(user.get('username', ''))}')" style="background: #059669; color: white;">密码</button>
-                    <button type="button" onclick="editUserRole({user.get('id')}, {str(user.get('is_admin', False)).lower()})" style="background: #d97706; color: white;">角色</button>
+                    <button type="button" onclick="editUserRole({user.get('id')}, {str(user.get('is_admin', False)).lower()}, {str(user.get('can_custom_task', False)).lower()})" style="background: #d97706; color: white;">角色</button>
                     <button type="button" onclick="toggleUserStatus({user.get('id')}, {str(user.get('enabled', True)).lower()})" style="background: #7c3aed; color: white;">{'禁用' if user.get('enabled', True) else '启用'}</button>
                     <button type="button" onclick="deleteUser({user.get('id')})" style="background: #dc2626; color: white;">删除</button>
                 </div>
@@ -1843,14 +1898,18 @@ def render_user_manage_page(users: list) -> bytes:
     </div>
     
     <div id="roleModal" class="modal-overlay">
-        <div class="modal-content narrow">
+        <div class="modal-content narrow modal-role">
             <h3>修改角色</h3>
             <form id="roleForm" onsubmit="updateRole(event)">
                 <input type="hidden" id="roleUserId" name="user_id">
-                <div class="form-row">
-                    <label style="display: flex; align-items: center; cursor: pointer;">
-                        <input type="checkbox" id="roleIsAdmin" name="is_admin" style="margin-right: 0.5rem;">
+                <div class="form-row role-permissions">
+                    <label class="role-perm-item">
+                        <input type="checkbox" id="roleIsAdmin" name="is_admin">
                         <span>设为管理员</span>
+                    </label>
+                    <label class="role-perm-item">
+                        <input type="checkbox" id="roleCanCustomTask" name="can_custom_task">
+                        <span>允许自定义任务</span>
                     </label>
                 </div>
                 <div class="btn-row">
@@ -1930,6 +1989,7 @@ def render_user_manage_page(users: list) -> bytes:
                             <p><strong>用户ID:</strong> ${{user.id}}</p>
                             <p><strong>用户名:</strong> ${{user.username}}</p>
                             <p><strong>角色:</strong> ${{user.is_admin ? '管理员' : '普通用户'}}</p>
+                            <p><strong>自定义任务:</strong> ${{user.can_custom_task ? '已开启' : '未开启'}}</p>
                             <p><strong>状态:</strong> ${{user.enabled ? '启用' : '禁用'}}</p>
                             <p><strong>创建时间:</strong> ${{user.created_at || '-'}}</p>
                             <p><strong>更新时间:</strong> ${{user.updated_at || '-'}}</p>
@@ -1987,9 +2047,10 @@ def render_user_manage_page(users: list) -> bytes:
             }}
         }}
         
-        function editUserRole(userId, isAdmin) {{
+        function editUserRole(userId, isAdmin, canCustomTask) {{
             document.getElementById('roleUserId').value = userId;
-            document.getElementById('roleIsAdmin').checked = isAdmin;
+            document.getElementById('roleIsAdmin').checked = isAdmin === true || isAdmin === 'true';
+            document.getElementById('roleCanCustomTask').checked = canCustomTask === true || canCustomTask === 'true';
             document.getElementById('roleModal').classList.add('show');
         }}
         
@@ -1997,11 +2058,13 @@ def render_user_manage_page(users: list) -> bytes:
             document.getElementById('roleModal').classList.remove('show');
         }}
         
+        
         async function updateRole(e) {{
             e.preventDefault();
             const formData = new FormData(e.target);
             const data = Object.fromEntries(formData);
             data.is_admin = formData.has('is_admin');
+            data.can_custom_task = formData.has('can_custom_task');
             
             try {{
                 const response = await fetch('/api/admin/users/role', {{
@@ -2072,4 +2135,142 @@ def render_user_manage_page(users: list) -> bytes:
         title="用户管理",
         content=content
     )
+    return page.encode("utf-8")
+
+
+def render_custom_tasks_page(
+    stock_list: str = "",
+    schedule_time: str = "18:00",
+    report_type: str = "simple",
+    enabled: bool = True,
+    message: Optional[str] = None,
+    last_run_at: Optional[str] = None
+) -> bytes:
+    """渲染用户自定义任务配置页面"""
+    toast_html = render_toast(message) if message else ""
+    safe_stock = html.escape(stock_list)
+    report_full = "selected" if report_type == "full" else ""
+    report_simple = "selected" if report_type == "simple" else ""
+    enabled_checked = "checked" if enabled else ""
+    last_run_str = f"上次执行: {last_run_at}" if last_run_at else "尚未执行"
+
+    content = f"""
+  <div class="container">
+    <div style="margin-bottom: 1rem;">
+      <a href="/" class="link-primary">← 返回主页</a>
+    </div>
+    <h2>⏰ 用户自定义任务</h2>
+    <p class="subtitle">配置独立的股票清单、执行时间、报告类型。系统将按计划自动执行分析并推送报表。您的配置会覆盖 .env 中的 STOCK_LIST。</p>
+
+    <div class="analysis-section" style="margin-top: 1rem;">
+      <form id="customTaskForm" onsubmit="saveCustomTask(event)">
+        <div class="form-group">
+          <label for="stock_list">📋 自选股列表</label>
+          <p class="text-muted">逗号或换行分隔，如: 600519, 000001, HK00700, AAPL</p>
+          <textarea id="stock_list" name="stock_list" rows="5" placeholder="例如: 600519, 000001 (逗号或换行分隔)">{safe_stock}</textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="schedule_time">🕐 每日执行时间</label>
+          <p class="text-muted">格式 HH:MM，如 09:30 或 18:00</p>
+          <input type="text" id="schedule_time" name="schedule_time" value="{html.escape(schedule_time)}" placeholder="18:00" maxlength="5" style="width: 6rem;">
+        </div>
+
+        <div class="form-group">
+          <label for="report_type">📊 报告类型</label>
+          <select id="report_type" name="report_type" class="report-select" style="min-width: 120px;">
+            <option value="full" {report_full}>完整报告</option>
+            <option value="simple" {report_simple}>精简报告</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" id="enabled" name="enabled" {enabled_checked}>
+            <span>启用定时任务</span>
+          </label>
+        </div>
+
+        <p class="text-muted" id="last_run_info">{last_run_str}</p>
+
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button type="submit" class="btn-analysis">💾 保存配置</button>
+          <button type="button" onclick="runNow()" class="btn-secondary">🚀 立即执行</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {toast_html}
+
+  <script>
+    async function saveCustomTask(e) {{
+      e.preventDefault();
+      const stockList = document.getElementById('stock_list').value;
+      const scheduleTime = document.getElementById('schedule_time').value || '18:00';
+      const reportType = document.getElementById('report_type').value;
+      const enabled = document.getElementById('enabled').checked;
+
+      try {{
+        const response = await fetch('/api/custom-tasks', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{
+            stock_list: stockList,
+            schedule_time: scheduleTime,
+            report_type: reportType,
+            enabled: enabled
+          }})
+        }});
+        const result = await response.json();
+
+        if (result.success) {{
+          window.location.href = '/custom-tasks?msg=已保存';
+        }} else {{
+          alert(result.error || '保存失败');
+        }}
+      }} catch (error) {{
+        alert('网络错误: ' + error.message);
+      }}
+    }}
+
+    async function runNow() {{
+      const stockList = document.getElementById('stock_list').value;
+      if (!stockList.trim()) {{
+        alert('请先填写股票列表');
+        return;
+      }}
+
+      if (!confirm('确定要立即执行分析任务吗？将对列表中的每只股票进行分析并推送报表。')) return;
+
+      try {{
+        const response = await fetch('/api/custom-tasks/run', {{
+          method: 'POST'
+        }});
+        const result = await response.json();
+
+        if (result.success) {{
+          alert(result.message || '任务已提交');
+          window.location.reload();
+        }} else {{
+          alert(result.error || '执行失败');
+        }}
+      }} catch (error) {{
+        alert('网络错误: ' + error.message);
+      }}
+    }}
+
+    // 从 URL 读取 msg 参数显示 toast
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('msg')) {{
+      const toast = document.createElement('div');
+      toast.className = 'toast show';
+      toast.textContent = params.get('msg');
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 2000);
+      history.replaceState({{}}, '', '/custom-tasks');
+    }}
+  </script>
+"""
+    page = render_base(title="自定义任务 | WebUI", content=content)
     return page.encode("utf-8")

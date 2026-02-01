@@ -31,6 +31,7 @@ from sqlalchemy import (
     select,
     and_,
     desc,
+    text,
 )
 from sqlalchemy.orm import (
     declarative_base,
@@ -48,7 +49,7 @@ Base = declarative_base()
 
 # 导入用户模型（确保表被创建）
 try:
-    from src.models import User, UserStockList
+    from src.models import User, UserStockList, UserCustomTask
 except ImportError:
     # 如果模型文件不存在，忽略（向后兼容）
     pass
@@ -177,6 +178,9 @@ class DatabaseManager:
         # 创建所有表
         Base.metadata.create_all(self._engine)
 
+        # 运行数据库迁移（添加新列等）
+        self._run_migrations()
+
         self._initialized = True
         logger.info(f"数据库初始化完成: {db_url}")
 
@@ -196,6 +200,21 @@ class DatabaseManager:
         if cls._instance is not None:
             cls._instance._engine.dispose()
             cls._instance = None
+
+    def _run_migrations(self) -> None:
+        """运行数据库迁移"""
+        try:
+            with self._engine.connect() as conn:
+                # 检查 users 表是否有 can_custom_task 列
+                result = conn.execute(
+                    text("SELECT 1 FROM pragma_table_info('users') WHERE name='can_custom_task'")
+                )
+                if result.fetchone() is None:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN can_custom_task BOOLEAN DEFAULT 0"))
+                    conn.commit()
+                    logger.info("[Storage] 迁移: 已添加 users.can_custom_task 列")
+        except Exception as e:
+            logger.warning(f"[Storage] 迁移执行失败（可能已执行过）: {e}")
 
     @classmethod
     def _cleanup_engine(cls, engine) -> None:

@@ -25,10 +25,11 @@ from datetime import datetime
 from typing import Dict, Any, Optional, TYPE_CHECKING
 
 from web.services import get_config_service, get_analysis_service
-from web.templates import render_config_page, render_login_page, render_user_manage_page
+from web.templates import render_config_page, render_login_page, render_user_manage_page, render_custom_tasks_page
 from src.enums import ReportType
 from src.user_service import get_user_service
 from web.auth import get_auth_manager
+from src.custom_task_service import get_custom_task_service
 
 if TYPE_CHECKING:
     from http.server import BaseHTTPRequestHandler
@@ -226,65 +227,20 @@ class PageHandler:
         if not user_info:
             user_info = {'user_id': 0, 'username': 'guest', 'is_admin': False}
         
-        # 获取用户的股票列表
-        if user_info['user_id'] > 0:
-            # 多用户模式：从数据库获取
-            stock_list = self.user_service.get_user_stock_list(user_info['user_id'])
-        else:
-            # 单用户模式或未登录：从 .env 获取
-            stock_list = self.config_service.get_stock_list()
+        # 获取用户是否有自定义任务权限（管理员默认拥有）
+        can_custom_task = user_info.get('is_admin', False)
+        if not can_custom_task and user_info.get('user_id', 0) > 0:
+            user = self.user_service.get_user(user_id=user_info['user_id'])
+            if user:
+                can_custom_task = getattr(user, 'can_custom_task', False) or False
         
-        env_filename = self.config_service.get_env_filename()
         body = render_config_page(
-            stock_list, 
-            env_filename, 
             current_user=user_info.get('username', 'guest'),
-            is_admin=user_info.get('is_admin', False)
+            is_admin=user_info.get('is_admin', False),
+            can_custom_task=can_custom_task
         )
         return HtmlResponse(body)
     
-    def handle_update(self, form_data: Dict[str, list], request_handler: 'BaseHTTPRequestHandler') -> Response:
-        """
-        处理配置更新 POST /update
-        
-        Args:
-            form_data: 表单数据
-            request_handler: HTTP 请求处理器（用于获取当前用户）
-        """
-        # 获取当前用户
-        user_info = self.auth_manager.check_auth(request_handler)
-        if not user_info:
-            return JsonResponse(
-                {"success": False, "error": "需要登录"},
-                status=HTTPStatus.UNAUTHORIZED
-            )
-        
-        stock_list = form_data.get("stock_list", [""])[0]
-        
-        if user_info['user_id'] > 0:
-            # 多用户模式：保存到数据库
-            normalized = self._normalize_stock_list(stock_list)
-            self.user_service.set_user_stock_list(user_info['user_id'], normalized)
-        else:
-            # 单用户模式：保存到 .env
-            normalized = self.config_service.set_stock_list(stock_list)
-        
-        env_filename = self.config_service.get_env_filename()
-        body = render_config_page(
-            normalized, 
-            env_filename, 
-            message="已保存",
-            current_user=user_info.get('username', 'guest'),
-            is_admin=user_info.get('is_admin', False)
-        )
-        return HtmlResponse(body)
-    
-    @staticmethod
-    def _normalize_stock_list(value: str) -> str:
-        """规范化股票列表格式"""
-        parts = [p.strip() for p in value.replace("\n", ",").split(",")]
-        parts = [p for p in parts if p]
-        return ",".join(parts)
 
 
 # ============================================================
@@ -678,10 +634,12 @@ class UserHandler:
         if error_response:
             return error_response
         
-        is_admin_str = form_data.get("is_admin", ["false"])[0].lower()
-        is_admin = is_admin_str == "true"
+        is_admin_raw = form_data.get("is_admin", ["false"])
+        is_admin = (is_admin_raw[0] if isinstance(is_admin_raw, list) else str(is_admin_raw)).lower() == "true"
+        can_custom_task_raw = form_data.get("can_custom_task", ["false"])
+        can_custom_task = (can_custom_task_raw[0] if isinstance(can_custom_task_raw, list) else str(can_custom_task_raw)).lower() == "true"
         
-        if self.user_service.update_user(user_id, is_admin=is_admin):
+        if self.user_service.update_user(user_id, is_admin=is_admin, can_custom_task=can_custom_task):
             return JsonResponse({"success": True, "message": "角色修改成功"})
         else:
             return JsonResponse(
@@ -713,6 +671,133 @@ class UserHandler:
                 status=HTTPStatus.NOT_FOUND
             )
 
+    def handle_custom_tasks_page(self, query: Dict[str, list], request_handler: 'BaseHTTPRequestHandler') -> Response:
+        """显示自定义任务配置页面 GET /custom-tasks"""
+        user_info = self.auth_manager.check_auth(request_handler)
+        if not user_info or user_info.get('user_id', 0) <= 0:
+            return RedirectResponse('/login')
+
+        # 管理员默认拥有自定义任务权限
+        has_permission = user_info.get('is_admin') or False
+        if not has_permission:
+            user = self.user_service.get_user(user_id=user_info['user_id'])
+            has_permission = user and getattr(user, 'can_custom_task', False)
+        if not has_permission:
+            from web.templates import render_error_page
+            body = render_error_page(
+                403, "没有自定义任务权限",
+                "请联系管理员在用户管理中开启您的「自定义任务」权限。"
+            )
+            return HtmlResponse(body, status=HTTPStatus.FORBIDDEN)
+
+        custom_svc = get_custom_task_service()
+        task = custom_svc.get_user_custom_task(user_info['user_id'])
+        msg = (query.get("msg") or [None])[0]
+        if task:
+            last_run = None
+            if task.get("last_run_at"):
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(task["last_run_at"].replace("Z", "+00:00"))
+                    last_run = dt.strftime("%Y-%m-%d %H:%M")
+                except Exception:
+                    last_run = task["last_run_at"][:16] if task["last_run_at"] else None
+            body = render_custom_tasks_page(
+                stock_list=task.get("stock_list", ""),
+                schedule_time=task.get("schedule_time", "18:00"),
+                report_type=task.get("report_type", "simple"),
+                enabled=task.get("enabled", True),
+                message=msg,
+                last_run_at=last_run
+            )
+        else:
+            body = render_custom_tasks_page(message=msg)
+
+        return HtmlResponse(body)
+
+    def handle_custom_tasks_api_get(self, request_handler: 'BaseHTTPRequestHandler') -> Response:
+        """获取自定义任务配置 GET /api/custom-tasks"""
+        user_info = self.auth_manager.check_auth(request_handler)
+        if not user_info or user_info.get('user_id', 0) <= 0:
+            return JsonResponse({"success": False, "error": "需要登录"}, status=HTTPStatus.UNAUTHORIZED)
+
+        # 管理员默认拥有自定义任务权限
+        has_permission = user_info.get('is_admin') or False
+        if not has_permission:
+            user = self.user_service.get_user(user_id=user_info['user_id'])
+            has_permission = user and getattr(user, 'can_custom_task', False)
+        if not has_permission:
+            return JsonResponse(
+                {"success": False, "error": "没有自定义任务权限"},
+                status=HTTPStatus.FORBIDDEN
+            )
+
+        custom_svc = get_custom_task_service()
+        task = custom_svc.get_user_custom_task(user_info['user_id'])
+        if task:
+            return JsonResponse({"success": True, "task": task})
+        return JsonResponse({"success": True, "task": None})
+
+    def handle_custom_tasks_api_post(
+        self, form_data: Dict[str, list], request_handler: 'BaseHTTPRequestHandler'
+    ) -> Response:
+        """保存自定义任务配置 POST /api/custom-tasks"""
+        user_info = self.auth_manager.check_auth(request_handler)
+        if not user_info or user_info.get('user_id', 0) <= 0:
+            return JsonResponse({"success": False, "error": "需要登录"}, status=HTTPStatus.UNAUTHORIZED)
+
+        # 管理员默认拥有自定义任务权限
+        has_permission = user_info.get('is_admin') or False
+        if not has_permission:
+            user = self.user_service.get_user(user_id=user_info['user_id'])
+            has_permission = user and getattr(user, 'can_custom_task', False)
+        if not has_permission:
+            return JsonResponse(
+                {"success": False, "error": "没有自定义任务权限"},
+                status=HTTPStatus.FORBIDDEN
+            )
+
+        # 支持 JSON body（form_data 中值为 list）
+        stock_list_raw = form_data.get("stock_list") or [""]
+        stock_list = stock_list_raw[0] if isinstance(stock_list_raw, list) else str(stock_list_raw)
+        schedule_time = (form_data.get("schedule_time") or ["18:00"])[0]
+        report_type = (form_data.get("report_type") or ["simple"])[0]
+        enabled_str = (form_data.get("enabled") or ["true"])[0]
+        enabled = str(enabled_str).lower() in ("1", "true", "yes")
+
+        custom_svc = get_custom_task_service()
+        if custom_svc.save_user_custom_task(
+            user_info['user_id'],
+            stock_list=stock_list,
+            schedule_time=schedule_time,
+            report_type=report_type,
+            enabled=enabled
+        ):
+            return JsonResponse({"success": True, "message": "保存成功"})
+        return JsonResponse({"success": False, "error": "保存失败"}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    def handle_custom_tasks_run(self, request_handler: 'BaseHTTPRequestHandler') -> Response:
+        """立即执行自定义任务 POST /api/custom-tasks/run"""
+        user_info = self.auth_manager.check_auth(request_handler)
+        if not user_info or user_info.get('user_id', 0) <= 0:
+            return JsonResponse({"success": False, "error": "需要登录"}, status=HTTPStatus.UNAUTHORIZED)
+
+        # 管理员默认拥有自定义任务权限
+        has_permission = user_info.get('is_admin') or False
+        if not has_permission:
+            user = self.user_service.get_user(user_id=user_info['user_id'])
+            has_permission = user and getattr(user, 'can_custom_task', False)
+        if not has_permission:
+            return JsonResponse(
+                {"success": False, "error": "没有自定义任务权限"},
+                status=HTTPStatus.FORBIDDEN
+            )
+
+        custom_svc = get_custom_task_service()
+        result = custom_svc.run_user_custom_task(user_info['user_id'])
+        if result.get("success"):
+            return JsonResponse(result)
+        return JsonResponse(result, status=HTTPStatus.BAD_REQUEST)
 
 # ============================================================
 # Bot Webhook 处理器

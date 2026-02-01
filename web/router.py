@@ -184,7 +184,7 @@ class Router:
             user_info = auth_manager.check_auth(request_handler)
             if not user_info:
                 # 接口类路径：返回 401 JSON，避免前端 fetch 收到 302 后解析 HTML 报错
-                api_paths_json_401 = {"/analysis", "/task", "/tasks"}
+                api_paths_json_401 = {"/analysis", "/task", "/tasks", "/api/custom-tasks", "/api/custom-tasks/run"}
                 if path in api_paths_json_401:
                     JsonResponse(
                         {"success": False, "error": "需要登录", "login_url": "/login"},
@@ -462,12 +462,6 @@ def create_default_router() -> Router:
     )
     
     router.register(
-        "/update", "POST",
-        lambda form, rh: page_handler.handle_update(form, rh),
-        "更新配置"
-    )
-    
-    router.register(
         "/login", "GET",
         lambda q: user_handler.handle_login_page(),
         "登录页面"
@@ -477,6 +471,12 @@ def create_default_router() -> Router:
         "/admin/users", "GET",
         lambda q, rh: user_handler.handle_user_manage(rh),
         "用户管理页面"
+    )
+
+    router.register(
+        "/custom-tasks", "GET",
+        lambda q, rh: user_handler.handle_custom_tasks_page(q, rh),
+        "自定义任务配置页面"
     )
     
     # === API 路由 ===
@@ -551,6 +551,24 @@ def create_default_router() -> Router:
         "/api/admin/users/status", "POST",
         lambda form, rh: user_handler.handle_update_user_status(form, rh),
         "启用/禁用用户"
+    )
+
+    router.register(
+        "/api/custom-tasks", "GET",
+        lambda q, rh: user_handler.handle_custom_tasks_api_get(rh),
+        "获取自定义任务配置"
+    )
+
+    router.register(
+        "/api/custom-tasks", "POST",
+        lambda form, rh: user_handler.handle_custom_tasks_api_post(form, rh),
+        "保存自定义任务配置"
+    )
+
+    router.register(
+        "/api/custom-tasks/run", "POST",
+        lambda form, rh: user_handler.handle_custom_tasks_run(rh),
+        "立即执行自定义任务"
     )
     
     router.register(

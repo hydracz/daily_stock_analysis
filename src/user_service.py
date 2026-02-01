@@ -146,7 +146,8 @@ class UserService:
         user_id: int,
         password: Optional[str] = None,
         enabled: Optional[bool] = None,
-        is_admin: Optional[bool] = None
+        is_admin: Optional[bool] = None,
+        can_custom_task: Optional[bool] = None
     ) -> bool:
         """
         更新用户信息
@@ -156,6 +157,7 @@ class UserService:
             password: 新密码（可选）
             enabled: 是否启用（可选）
             is_admin: 是否管理员（可选）
+            can_custom_task: 是否允许自定义任务（可选）
             
         Returns:
             是否更新成功
@@ -177,6 +179,9 @@ class UserService:
             
             if is_admin is not None:
                 user.is_admin = is_admin
+            
+            if can_custom_task is not None:
+                user.can_custom_task = can_custom_task
             
             user.updated_at = datetime.now()
             session.commit()
