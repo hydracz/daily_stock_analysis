@@ -16,6 +16,7 @@ A股自选股智能分析系统 - 分析历史存储
             ├── meta.json       # 分析元信息：股票名、分析时间、是否成功
             ├── data/           # 获取到的数据（分类）
             │   ├── daily.json      # 日线/分析上下文（today、yesterday 等）
+            │   ├── daily_{数据源}.csv  # 按数据源保存的日线原始 CSV（如 daily_akshare_fetcher.csv）
             │   ├── realtime.json   # 实时行情
             │   ├── chip.json      # 筹码分布
             │   ├── trend.json     # 趋势分析结果

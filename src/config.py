@@ -115,7 +115,13 @@ class Config:
     # === 分析历史存储（按股票+日期缓存，减少外部 API 调用）===
     enable_analysis_history: bool = True  # 是否启用分析历史缓存
     analysis_history_dir: str = "./analysis_history"  # 历史存储根目录
-    
+
+    # === 日线数据获取天数（akshare/efinance 等数据源）===
+    daily_data_days: int = 90  # 获取最近 N 天日线数据（可配，默认 90 天）
+
+    # === 日线原始数据历史（写入 analysis_history 对应子目录）===
+    enable_data_history: bool = True  # 是否将获取到的日线数据写入 analysis_history/{日期}/{代码}/data/daily_{数据源}.csv
+
     # === 日志配置 ===
     log_dir: str = "./logs"  # 日志文件目录
     log_level: str = "INFO"  # 日志级别
@@ -350,6 +356,8 @@ class Config:
             database_path=os.getenv('DATABASE_PATH', './data/stock_analysis.db'),
             enable_analysis_history=os.getenv('ENABLE_ANALYSIS_HISTORY', 'true').lower() == 'true',
             analysis_history_dir=os.getenv('ANALYSIS_HISTORY_DIR', './analysis_history'),
+            daily_data_days=int(os.getenv('DAILY_DATA_DAYS', '90')),
+            enable_data_history=os.getenv('ENABLE_DATA_HISTORY', 'true').lower() == 'true',
             log_dir=os.getenv('LOG_DIR', './logs'),
             log_level=os.getenv('LOG_LEVEL', 'INFO'),
             max_workers=int(os.getenv('MAX_WORKERS', '3')),

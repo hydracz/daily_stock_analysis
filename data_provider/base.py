@@ -100,7 +100,7 @@ class BaseFetcher(ABC):
         stock_code: str, 
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        days: int = 30
+        days: int = 90
     ) -> pd.DataFrame:
         """
         获取日线数据（统一入口）
@@ -115,7 +115,7 @@ class BaseFetcher(ABC):
             stock_code: 股票代码
             start_date: 开始日期（可选）
             end_date: 结束日期（可选，默认今天）
-            days: 获取天数（当 start_date 未指定时使用）
+            days: 获取天数（当 start_date 未指定时使用，默认 90）
             
         Returns:
             标准化的 DataFrame，包含技术指标
@@ -125,7 +125,7 @@ class BaseFetcher(ABC):
             end_date = datetime.now().strftime('%Y-%m-%d')
         
         if start_date is None:
-            # 默认获取最近 30 个交易日（按日历日估算，多取一些）
+            # 默认获取最近 N 个交易日（按日历日估算，多取一些）
             from datetime import timedelta
             start_dt = datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=days * 2)
             start_date = start_dt.strftime('%Y-%m-%d')
@@ -315,7 +315,7 @@ class DataFetcherManager:
         stock_code: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        days: int = 30
+        days: int = 90
     ) -> Tuple[pd.DataFrame, str]:
         """
         获取日线数据（自动切换数据源）
@@ -330,7 +330,7 @@ class DataFetcherManager:
             stock_code: 股票代码
             start_date: 开始日期
             end_date: 结束日期
-            days: 获取天数
+            days: 获取天数（默认 90，可由配置 DAILY_DATA_DAYS 覆盖）
             
         Returns:
             Tuple[DataFrame, str]: (数据, 成功的数据源名称)

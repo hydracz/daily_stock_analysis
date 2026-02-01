@@ -183,8 +183,15 @@ class Router:
         if auth_manager.enabled:
             user_info = auth_manager.check_auth(request_handler)
             if not user_info:
-                # 多用户模式：重定向到登录页面
-                # 单用户模式：使用 Basic Auth
+                # 接口类路径：返回 401 JSON，避免前端 fetch 收到 302 后解析 HTML 报错
+                api_paths_json_401 = {"/analysis", "/task", "/tasks"}
+                if path in api_paths_json_401:
+                    JsonResponse(
+                        {"success": False, "error": "需要登录", "login_url": "/login"},
+                        status=HTTPStatus.UNAUTHORIZED,
+                    ).send(request_handler)
+                    return
+                # 多用户模式：重定向到登录页面；单用户模式：使用 Basic Auth
                 has_users = len(get_user_service().list_users(include_disabled=True)) > 0
                 auth_manager.send_auth_required(request_handler, redirect_to_login=has_users)
                 return

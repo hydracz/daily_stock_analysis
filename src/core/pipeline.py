@@ -19,6 +19,7 @@ from typing import List, Dict, Any, Optional, Tuple, Callable
 
 from src.config import get_config, Config
 from src.storage import get_db
+from src.data_history import save_daily_data_to_history
 from src.analysis_history import (
     is_history_enabled,
     has_cached_analysis,
@@ -127,11 +128,15 @@ class StockAnalysisPipeline:
             
             # 从数据源获取数据
             logger.info(f"[{code}] 开始从数据源获取数据...")
-            df, source_name = self.fetcher_manager.get_daily_data(code, days=30)
+            days = get_config().daily_data_days
+            df, source_name = self.fetcher_manager.get_daily_data(code, days=days)
             
             if df is None or df.empty:
                 return False, "获取数据为空"
-            
+
+            # 按数据源、日期写入历史目录（可选）
+            save_daily_data_to_history(df, code, source_name, fetch_date=today)
+
             # 保存到数据库
             saved_count = self.db.save_daily_data(df, code, source_name)
             logger.info(f"[{code}] 数据保存成功（来源: {source_name}，新增 {saved_count} 条）")

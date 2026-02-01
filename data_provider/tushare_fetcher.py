@@ -87,11 +87,9 @@ class TushareFetcher(BaseFetcher):
         try:
             import tushare as ts
             
-            # 设置 Token
-            ts.set_token(config.tushare_token)
-            
-            # 获取 API 实例
-            self._api = ts.pro_api()
+            # 直接传入 Token 获取 API 实例（不调用 set_token，避免写 tk.csv 到磁盘）
+            # 在只读文件系统（如只读容器）下，set_token 会因无法写 /root/tk.csv 而报错
+            self._api = ts.pro_api(config.tushare_token)
             
             logger.info("Tushare API 初始化成功")
             

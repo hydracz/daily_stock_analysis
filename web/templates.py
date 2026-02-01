@@ -1415,8 +1415,12 @@ def render_config_page(
                 }
                 
                 fetch('/task?id=' + encodeURIComponent(taskId))
-                    .then(r => r.json())
+                    .then(r => {
+                        if (r.status === 401) { window.location.href = '/login'; return null; }
+                        return r.json();
+                    })
                     .then(data => {
+                        if (!data) return;
                         if (data.success && data.task) {
                             taskData.task = data.task;
                             renderAllTasks();
@@ -1473,8 +1477,20 @@ def render_config_page(
         const url = '/analysis?code=' + encodeURIComponent(code) + '&report_type=' + encodeURIComponent(reportType) +
             (forceRefresh ? '&force_refresh=true' : '');
         fetch(url)
-            .then(response => response.json())
+            .then(response => {
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return null;
+                }
+                const ct = (response.headers.get('Content-Type') || '');
+                if (ct.includes('text/html')) {
+                    window.location.href = '/login';
+                    return null;
+                }
+                return response.json();
+            })
             .then(data => {
+                if (!data) return;
                 if (data.success) {
                     const taskId = data.task_id;
                     tasks.set(taskId, {
@@ -1494,8 +1510,12 @@ def render_config_page(
                     // 立即轮询一次
                     setTimeout(() => {
                         fetch('/task?id=' + encodeURIComponent(taskId))
-                            .then(r => r.json())
+                            .then(r => {
+                                if (r.status === 401) { window.location.href = '/login'; return null; }
+                                return r.json();
+                            })
                             .then(d => {
+                                if (!d) return;
                                 if (d.success && d.task) {
                                     tasks.get(taskId).task = d.task;
                                     renderAllTasks();
@@ -1507,7 +1527,11 @@ def render_config_page(
                 }
             })
             .catch(error => {
-                alert('请求失败: ' + error.message);
+                if (error.message && (error.message.includes('JSON') || error.message.includes('<!doctype'))) {
+                    window.location.href = '/login';
+                } else {
+                    alert('请求失败: ' + error.message);
+                }
             })
             .finally(() => {
                 submitBtn.disabled = false;
