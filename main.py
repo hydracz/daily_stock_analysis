@@ -22,6 +22,8 @@ A股自选股智能分析系统 - 主调度程序
 - 买点偏好：缩量回踩 MA5/MA10 支撑
 """
 import os
+from src.config import setup_env
+setup_env()
 
 # 代理配置：从 .env 环境变量读取，无配置则直连
 # get_config() 加载时会自动应用 HTTP_PROXY/HTTPS_PROXY 并设置 NO_PROXY 排除国内数据源
@@ -257,7 +259,8 @@ def run_full_analysis(
             review_result = run_market_review(
                 notifier=pipeline.notifier,
                 analyzer=pipeline.analyzer,
-                search_service=pipeline.search_service
+                search_service=pipeline.search_service,
+                send_notification=not args.no_notify
             )
             # 如果有结果，赋值给 market_report 用于后续飞书文档生成
             if review_result:
@@ -303,7 +306,8 @@ def run_full_analysis(
                 if doc_url:
                     logger.info(f"飞书云文档创建成功: {doc_url}")
                     # 可选：将文档链接也推送到群里
-                    pipeline.notifier.send(f"[{now.strftime('%Y-%m-%d %H:%M')}] 复盘文档创建成功: {doc_url}")
+                    if not args.no_notify:
+                        pipeline.notifier.send(f"[{now.strftime('%Y-%m-%d %H:%M')}] 复盘文档创建成功: {doc_url}")
 
         except Exception as e:
             logger.error(f"飞书文档生成失败: {e}")
@@ -426,10 +430,20 @@ def main() -> int:
                     serpapi_keys=config.serpapi_keys
                 )
             
-            if config.gemini_api_key:
+            if config.gemini_api_key or config.openai_api_key:
                 analyzer = GeminiAnalyzer(api_key=config.gemini_api_key)
+                if not analyzer.is_available():
+                    logger.warning("AI 分析器初始化后不可用，请检查 API Key 配置")
+                    analyzer = None
+            else:
+                logger.warning("未检测到 API Key (Gemini/OpenAI)，将仅使用模板生成报告")
             
-            run_market_review(notifier, analyzer, search_service)
+            run_market_review(
+                notifier=notifier, 
+                analyzer=analyzer, 
+                search_service=search_service,
+                send_notification=not args.no_notify
+            )
             return 0
         
         # 模式2: 定时任务模式
