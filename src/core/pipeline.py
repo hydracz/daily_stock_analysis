@@ -602,7 +602,18 @@ class StockAnalysisPipeline:
         
         logger.info("===== 分析完成 =====")
         logger.info(f"成功: {success_count}, 失败: {fail_count}, 耗时: {elapsed_time:.2f} 秒")
-        
+        # Tushare 缓存 API 拉取统计（本次运行从 Tushare API 拉取的数据量）
+        try:
+            stats = self.fetcher_manager.get_tushare_cache_fetch_stats()
+            if stats and (stats.get("api_calls") or 0) > 0:
+                logger.info(
+                    "Tushare 缓存本次运行 API 拉取: 调用 %d 次，共 %d 条数据（股票: %s）",
+                    stats.get("api_calls", 0),
+                    stats.get("api_rows", 0),
+                    ", ".join(stats.get("api_codes", [])) or "-",
+                )
+        except Exception as e:
+            logger.debug("获取 Tushare 缓存统计失败: %s", e)
         # 发送通知（单股推送模式下跳过汇总推送，避免重复）
         if results and send_notification and not dry_run:
             if single_stock_notify:

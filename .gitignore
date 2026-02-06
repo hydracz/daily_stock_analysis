@@ -52,6 +52,9 @@ reports/
 
 # 分析历史缓存（按股票+日期存储，减少 API 调用）
 analysis_history/
+
+# Tushare 独立缓存数据目录（仅根目录，不忽略 src/tushare_cache 源码）
+/tushare_cache/
 *.db
 *.sqlite
 *.sqlite3

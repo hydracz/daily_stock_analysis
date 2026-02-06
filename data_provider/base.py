@@ -331,7 +331,6 @@ class DataFetcherManager:
         baostock = BaostockFetcher()
         yfinance = YfinanceFetcher()
 
-        # 初始化数据源列表
         self._fetchers = [
             efinance,
             akshare,
@@ -340,6 +339,19 @@ class DataFetcherManager:
             baostock,
             yfinance,
         ]
+
+        # Tushare 独立缓存：启用时加入 TushareCachedFetcher，优先从本地返回
+        if getattr(config, "enable_tushare_cache", False):
+            import os
+            os.environ["TUSHARE_CACHE_DIR"] = getattr(config, "tushare_cache_dir", "./tushare_cache")
+            try:
+                from .tushare_cached_fetcher import TushareCachedFetcher
+                cached = TushareCachedFetcher()
+                if cached.is_available():
+                    self._fetchers.append(cached)
+                    logger.info("已启用 Tushare 独立缓存 (TushareCachedFetcher)")
+            except Exception as e:
+                logger.warning("Tushare 缓存 Fetcher 加载失败，将不使用缓存: %s", e)
 
         # 按优先级排序（Tushare 如果配置了 Token 且初始化成功，优先级为 0）
         self._fetchers.sort(key=lambda f: f.priority)
@@ -413,7 +425,20 @@ class DataFetcherManager:
     def available_fetchers(self) -> List[str]:
         """返回可用数据源名称列表"""
         return [f.name for f in self._fetchers]
-    
+
+    def get_tushare_cache_fetch_stats(self) -> Optional[Dict[str, Any]]:
+        """
+        返回本进程内 Tushare 缓存从 API 拉取的统计（仅当使用了 TushareCachedFetcher 时有效）。
+
+        Returns:
+            dict 或 None: 若存在 TushareCachedFetcher 则返回
+            {"api_calls": int, "api_rows": int, "api_codes": list}，否则返回 None
+        """
+        for f in self._fetchers:
+            if f.name == "TushareCachedFetcher" and hasattr(f, "get_fetch_stats"):
+                return f.get_fetch_stats()
+        return None
+
     def prefetch_realtime_quotes(self, stock_codes: List[str]) -> int:
         """
         批量预取实时行情数据（在分析开始前调用）

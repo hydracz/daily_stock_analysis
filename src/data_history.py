@@ -69,6 +69,12 @@ def save_daily_data_to_history(
         if not getattr(config, "enable_data_history", True):
             return None
 
+        # Tushare 数据已有独立缓存（tushare_cache），不再写入 analysis_history
+        source_lower = (source_name or "").strip().lower()
+        if "tushare" in source_lower:
+            logger.debug(f"[DataHistory] 跳过 Tushare 数据源写入 history: {source_name}")
+            return None
+
         root = _get_analysis_history_root()
         d = fetch_date or date.today()
         date_str = d.strftime("%Y-%m-%d")

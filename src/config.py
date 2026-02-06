@@ -45,6 +45,9 @@ class Config:
 
     # === 数据源 API Token ===
     tushare_token: Optional[str] = None
+    # Tushare 独立缓存：本地优先，缺数据时再调 API；需排除非交易日
+    enable_tushare_cache: bool = True  # 默认开启，优先使用 TushareCachedFetcher
+    tushare_cache_dir: str = "./tushare_cache"  # 缓存根目录，也可用环境变量 TUSHARE_CACHE_DIR
     
     # === AI 分析配置 ===
     gemini_api_key: Optional[str] = None
@@ -327,6 +330,8 @@ class Config:
             feishu_app_secret=os.getenv('FEISHU_APP_SECRET'),
             feishu_folder_token=os.getenv('FEISHU_FOLDER_TOKEN'),
             tushare_token=os.getenv('TUSHARE_TOKEN'),
+            enable_tushare_cache=os.getenv('ENABLE_TUSHARE_CACHE', 'true').lower() == 'true',
+            tushare_cache_dir=os.getenv('TUSHARE_CACHE_DIR', './tushare_cache'),
             gemini_api_key=os.getenv('GEMINI_API_KEY'),
             gemini_model=os.getenv('GEMINI_MODEL', 'gemini-3-flash-preview'),
             gemini_model_fallback=os.getenv('GEMINI_MODEL_FALLBACK', 'gemini-2.5-flash'),
